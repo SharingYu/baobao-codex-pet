@@ -1,0 +1,6 @@
+runs/
+.agents/
+plugins/
+*.png
+!pets/**
+!plugins/**/assets/*.png
