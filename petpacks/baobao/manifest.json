@@ -1,0 +1,323 @@
+{
+  "$schema": "https://raw.githubusercontent.com/SharingYu/baobao-codex-pet/main/packages/pet-schema/petpack.v1.schema.json",
+  "format": "com.baofeifei.petpack",
+  "manifestVersion": "1.0",
+  "id": "baobao",
+  "displayName": "包包 Baobao",
+  "description": "戴着铃铛项圈的金色长毛猫。",
+  "license": "LicenseRef-Personal-Display-Only",
+  "source": {
+    "kind": "codex-v2",
+    "spriteVersionNumber": 2
+  },
+  "assets": [
+    {
+      "id": "atlas",
+      "path": "assets/atlas.webp",
+      "mediaType": "image/webp",
+      "bytes": 2870656,
+      "sha256": "4a357ad6203c7448e3cac8a8a18276f0e6a7a6ffff73381889461cb0b73b0a92",
+      "width": 1536,
+      "height": 2288
+    }
+  ],
+  "renderer": {
+    "type": "sprite-atlas",
+    "atlasAsset": "atlas",
+    "cellWidth": 192,
+    "cellHeight": 208,
+    "columns": 8,
+    "rows": 11,
+    "anchor": {
+      "x": 0.5,
+      "y": 1
+    },
+    "defaultScale": 1,
+    "animations": {
+      "idle": {
+        "row": 0,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "frameDurationsMs": [
+          280,
+          110,
+          110,
+          140,
+          140,
+          320
+        ],
+        "loop": true
+      },
+      "running-right": {
+        "row": 1,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "frameDurationsMs": [
+          120,
+          120,
+          120,
+          120,
+          120,
+          120,
+          120,
+          220
+        ],
+        "loop": true
+      },
+      "running-left": {
+        "row": 2,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "frameDurationsMs": [
+          120,
+          120,
+          120,
+          120,
+          120,
+          120,
+          120,
+          220
+        ],
+        "loop": true
+      },
+      "waving": {
+        "row": 3,
+        "frames": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "frameDurationsMs": [
+          140,
+          140,
+          140,
+          280
+        ],
+        "loop": false
+      },
+      "jumping": {
+        "row": 4,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "frameDurationsMs": [
+          140,
+          140,
+          140,
+          140,
+          280
+        ],
+        "loop": false
+      },
+      "failed": {
+        "row": 5,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "frameDurationsMs": [
+          140,
+          140,
+          140,
+          140,
+          140,
+          140,
+          140,
+          240
+        ],
+        "loop": false
+      },
+      "waiting": {
+        "row": 6,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "frameDurationsMs": [
+          150,
+          150,
+          150,
+          150,
+          150,
+          260
+        ],
+        "loop": true
+      },
+      "running": {
+        "row": 7,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "frameDurationsMs": [
+          120,
+          120,
+          120,
+          120,
+          120,
+          220
+        ],
+        "loop": true
+      },
+      "review": {
+        "row": 8,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "frameDurationsMs": [
+          150,
+          150,
+          150,
+          150,
+          150,
+          280
+        ],
+        "loop": true
+      }
+    },
+    "lookDirections": [
+      {
+        "degrees": 0,
+        "row": 9,
+        "column": 0
+      },
+      {
+        "degrees": 22.5,
+        "row": 9,
+        "column": 1
+      },
+      {
+        "degrees": 45,
+        "row": 9,
+        "column": 2
+      },
+      {
+        "degrees": 67.5,
+        "row": 9,
+        "column": 3
+      },
+      {
+        "degrees": 90,
+        "row": 9,
+        "column": 4
+      },
+      {
+        "degrees": 112.5,
+        "row": 9,
+        "column": 5
+      },
+      {
+        "degrees": 135,
+        "row": 9,
+        "column": 6
+      },
+      {
+        "degrees": 157.5,
+        "row": 9,
+        "column": 7
+      },
+      {
+        "degrees": 180,
+        "row": 10,
+        "column": 0
+      },
+      {
+        "degrees": 202.5,
+        "row": 10,
+        "column": 1
+      },
+      {
+        "degrees": 225,
+        "row": 10,
+        "column": 2
+      },
+      {
+        "degrees": 247.5,
+        "row": 10,
+        "column": 3
+      },
+      {
+        "degrees": 270,
+        "row": 10,
+        "column": 4
+      },
+      {
+        "degrees": 292.5,
+        "row": 10,
+        "column": 5
+      },
+      {
+        "degrees": 315,
+        "row": 10,
+        "column": 6
+      },
+      {
+        "degrees": 337.5,
+        "row": 10,
+        "column": 7
+      }
+    ]
+  },
+  "interactions": {
+    "eventMap": {
+      "idle": "idle",
+      "move-right": "running-right",
+      "move-left": "running-left",
+        "greet": "waving",
+        "pet": "waving",
+        "feed": "jumping",
+        "play": "jumping",
+        "jump": "jumping",
+      "error": "failed",
+      "waiting": "waiting",
+      "working": "running",
+      "review": "review"
+    }
+  }
+}

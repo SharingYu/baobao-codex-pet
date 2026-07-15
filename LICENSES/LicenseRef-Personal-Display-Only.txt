@@ -1,0 +1,11 @@
+LicenseRef-Personal-Display-Only
+
+Copyright (c) 2026 SharingYu. All rights reserved.
+
+Permission is granted to download, install, run, and publicly display the Baobao and Feifei character assets solely for personal, non-commercial use with this project.
+
+You may make private modifications for your own personal use. You may not sell, sublicense, rehost, redistribute, publish modified copies, use the assets in merchandise or advertising, include them in a training dataset, or use the pets' identities for another commercial product without prior written permission from the copyright holder.
+
+This license covers only the character identities and visual assets identified in NOTICE.md. It does not replace the MIT License for the project's source code, schemas, tools, configuration, or documentation.
+
+THE ASSETS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THEIR USE.

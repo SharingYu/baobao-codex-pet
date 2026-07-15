@@ -1,0 +1,13 @@
+{
+  "name": "@baofeifei/petpack-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "validate:examples": "node cli.mjs validate ../../petpacks/baobao && node cli.mjs validate ../../petpacks/feifei"
+  }
+}
