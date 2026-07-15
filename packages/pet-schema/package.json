@@ -1,0 +1,16 @@
+{
+  "name": "@baofeifei/pet-schema",
+  "version": "0.1.0",
+  "private": true,
+  "files": [
+    "petpack.v1.schema.json",
+    "types.d.ts",
+    "README.md"
+  ],
+  "exports": {
+    "./petpack.v1.schema.json": "./petpack.v1.schema.json",
+    "./types": {
+      "types": "./types.d.ts"
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "name": "baobao-feifei-desktop-pet",
+  "version": "0.1.0-alpha",
+  "private": true,
+  "description": "A calm Windows desktop companion powered by custom pet packs.",
+  "main": "apps/desktop/electron/main.cjs",
+  "author": "SharingYu",
+  "license": "MIT",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=11.7.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -s first \"pnpm dev:renderer\" \"pnpm dev:electron\"",
+    "dev:renderer": "vite --config apps/desktop/vite.config.mjs --host 127.0.0.1",
+    "dev:electron": "wait-on tcp:127.0.0.1:5173 && cross-env PET_DESKTOP_DEV_URL=http://127.0.0.1:5173 electron .",
+    "build": "pnpm build:renderer",
+    "build:renderer": "vite build --config apps/desktop/vite.config.mjs",
+    "check": "node --check apps/desktop/electron/main.cjs && node --check apps/desktop/electron/preload.cjs && node --check apps/desktop/electron/petpack-compat.cjs && node --check apps/desktop/renderer/main.js && node --check apps/desktop/renderer/bridge.js && node --test tools/petpack/test/*.test.mjs",
+    "pack": "pnpm build && electron-builder --dir",
+    "dist:win": "pnpm build && electron-builder --win nsis",
+    "dist:portable": "pnpm build && electron-builder --win portable -c.artifactName=PetDesktop-Portable-${version}-${arch}.${ext}"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.0.0",
+    "electron": "^38.1.2",
+    "electron-builder": "^26.0.12",
+    "vite": "^7.1.7",
+    "wait-on": "^8.0.4"
+  },
+  "build": {
+    "appId": "com.sharingyu.petdesktop",
+    "productName": "Pet Desktop Companion",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "apps/desktop/electron/**/*",
+      "apps/desktop/dist/**/*",
+      "LICENSE",
+      "NOTICE.md",
+      "LICENSES/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "petpacks",
+        "to": "petpacks",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "tools/petpack/lib.mjs",
+        "to": "petpack-runtime/lib.mjs"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "PetDesktop-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Pet Desktop Companion"
+    }
+  }
+}
