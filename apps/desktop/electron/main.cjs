@@ -18,10 +18,13 @@ const { IPC } = require('./ipc-contract.cjs');
 const { assertAlphaRendererCompatibility } = require('./petpack-compat.cjs');
 const { AtomicJsonStore } = require('./state-store.cjs');
 
-const APP_NAME = 'Baobao & Feifei Desktop Pets';
+const APP_NAME = 'Pet Desktop Companion';
 const PETPACK_SCHEME = 'petpack';
 const MAX_REGIONS = 128;
 const HIT_TEST_INTERVAL_MS = 60;
+const HOVER_GRACE_MS = 240;
+const CONTROL_DOCK_HALF_WIDTH = 232;
+const CONTROL_DOCK_HEIGHT = 86;
 const PET_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 protocol.registerSchemesAsPrivileged([
@@ -50,6 +53,7 @@ const hitTestState = {
   mode: 'regions',
   regions: [],
   hovered: false,
+  hoverGraceUntil: 0,
   manualIgnore: true,
   manualForward: true,
   lastAppliedIgnore: null,
@@ -72,59 +76,66 @@ function buildRuntimeConfig() {
   const defaultRendererDirectory = packaged
     ? path.join(app.getAppPath(), 'apps', 'desktop', 'dist')
     : path.join(repositoryRoot, 'apps', 'desktop', 'dist');
-  const defaultPetpacksDirectory = packaged
-    ? path.join(process.resourcesPath, 'petpacks')
-    : path.join(repositoryRoot, 'petpacks');
   const defaultPetpackLibrary = packaged
     ? path.join(process.resourcesPath, 'petpack-runtime', 'lib.mjs')
     : path.join(repositoryRoot, 'tools', 'petpack', 'lib.mjs');
+  const defaultItempackLibrary = packaged
+    ? path.join(process.resourcesPath, 'itempack-runtime', 'lib.mjs')
+    : path.join(repositoryRoot, 'tools', 'itempack', 'lib.mjs');
 
-  const rendererDirectory = firstValue(
-    readArg('--renderer-dir'),
-    process.env.PET_DESKTOP_RENDERER_DIR,
-    defaultRendererDirectory,
-  );
-  const petpacksDirectory = firstValue(
-    readArg('--petpacks-dir'),
-    process.env.PET_DESKTOP_PETPACKS_DIR,
-    defaultPetpacksDirectory,
-  );
-
+  // Packaged builds never accept renderer or runtime-library overrides. Those
+  // switches are useful for local development, but honoring them in a shipped
+  // executable would let an untrusted page inherit the preload API or let an
+  // arbitrary local module execute in the main process.
+  const rendererDirectory = packaged
+    ? defaultRendererDirectory
+    : firstValue(
+      readArg('--renderer-dir'),
+      process.env.PET_DESKTOP_RENDERER_DIR,
+      defaultRendererDirectory,
+    );
   return {
     packaged,
-    rendererUrl: firstValue(
-      readArg('--renderer-url'),
-      process.env.PET_DESKTOP_RENDERER_URL,
-      process.env.PET_DESKTOP_DEV_URL,
-    ),
+    rendererUrl: packaged
+      ? undefined
+      : firstValue(
+        readArg('--renderer-url'),
+        process.env.PET_DESKTOP_RENDERER_URL,
+        process.env.PET_DESKTOP_DEV_URL,
+      ),
     rendererDirectory: path.resolve(rendererDirectory),
-    overlayUrl: firstValue(
-      readArg('--overlay-url'),
-      process.env.PET_DESKTOP_OVERLAY_URL,
-    ),
-    controlUrl: firstValue(
-      readArg('--control-url'),
-      process.env.PET_DESKTOP_CONTROL_URL,
-    ),
-    petpacksDirectory: path.resolve(petpacksDirectory),
+    overlayUrl: packaged
+      ? undefined
+      : firstValue(
+        readArg('--overlay-url'),
+        process.env.PET_DESKTOP_OVERLAY_URL,
+      ),
+    controlUrl: packaged
+      ? undefined
+      : firstValue(
+        readArg('--control-url'),
+        process.env.PET_DESKTOP_CONTROL_URL,
+      ),
     userPetpacksDirectory: path.join(app.getPath('userData'), 'petpacks'),
-    petpackLibrary: path.resolve(
-      firstValue(
+    userItempacksDirectory: path.join(app.getPath('userData'), 'itempacks'),
+    petpackLibrary: path.resolve(packaged
+      ? defaultPetpackLibrary
+      : firstValue(
         readArg('--petpack-library'),
         process.env.PET_DESKTOP_PETPACK_LIBRARY,
         defaultPetpackLibrary,
-      ),
-    ),
+      )),
+    itempackLibrary: path.resolve(packaged
+      ? defaultItempackLibrary
+      : firstValue(
+        readArg('--itempack-library'),
+        process.env.PET_DESKTOP_ITEMPACK_LIBRARY,
+        defaultItempackLibrary,
+      )),
     trayIcon: firstValue(
       readArg('--tray-icon'),
       process.env.PET_DESKTOP_TRAY_ICON,
     ),
-    rootKind:
-      readArg('--petpacks-dir') || process.env.PET_DESKTOP_PETPACKS_DIR
-        ? 'override'
-        : packaged
-          ? 'packaged'
-          : 'development',
   };
 }
 
@@ -377,15 +388,8 @@ function trayIconImage() {
     if (!candidate.isEmpty()) return candidate;
   }
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-    <path fill="#D89C57" d="M5 13 7 3l7 6h4l7-6 2 10v8c0 5-5 9-11 9S5 26 5 21z"/>
-    <path fill="#FFF5E8" d="M9 16c2-3 12-3 14 0v7c-2 3-12 3-14 0z"/>
-    <circle cx="12" cy="17" r="2" fill="#27343B"/><circle cx="20" cy="17" r="2" fill="#27343B"/>
-    <path d="m14 21 2 1 2-1" fill="none" stroke="#A45D5D" stroke-width="1.5" stroke-linecap="round"/>
-  </svg>`;
-  const image = nativeImage.createFromDataURL(
-    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
-  );
+  const iconPath = path.join(app.getAppPath(), 'build', 'icon.png');
+  const image = nativeImage.createFromPath(iconPath);
 
   if (!image.isEmpty()) return image.resize({ width: 16, height: 16 });
 
@@ -464,10 +468,10 @@ async function handlePetpackRequest(request) {
   try {
     const url = new URL(request.url);
     const rootDirectory =
-      url.hostname === 'builtin' || url.hostname === 'local'
-        ? runtimeConfig.petpacksDirectory
-        : url.hostname === 'user'
-          ? runtimeConfig.userPetpacksDirectory
+      url.hostname === 'pets'
+        ? runtimeConfig.userPetpacksDirectory
+        : url.hostname === 'items'
+          ? runtimeConfig.userItempacksDirectory
           : null;
     if (!rootDirectory) {
       return new Response('Not found', { status: 404 });
@@ -497,14 +501,12 @@ async function handlePetpackRequest(request) {
       status: 200,
       headers: {
         'content-type': mimeTypeFor(requested),
-        'cache-control': runtimeConfig.packaged && url.hostname !== 'user'
-          ? 'public, max-age=31536000, immutable'
-          : 'no-cache',
+        'cache-control': 'no-cache',
       },
     });
   } catch (error) {
     const status = error.code === 'ENOENT' ? 404 : 500;
-    return new Response(status === 404 ? 'Not found' : 'Unable to load petpack', {
+    return new Response(status === 404 ? 'Not found' : 'Unable to load package asset', {
       status,
     });
   }
@@ -529,7 +531,7 @@ function readManifest(directory) {
   return null;
 }
 
-function readCatalogRoot(root, installation) {
+function readCatalogRoot(root, collection, expectedFormat) {
   let entries = [];
 
   try {
@@ -538,51 +540,50 @@ function readCatalogRoot(root, installation) {
     return [];
   }
 
-  const pets = [];
+  const packs = [];
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name.includes('.import-')) continue;
     const loaded = readManifest(path.join(root, entry.name));
     if (!loaded) continue;
+    if (loaded.manifest.format !== expectedFormat) continue;
 
     const id = String(loaded.manifest.id || entry.name);
-    pets.push({
+    packs.push({
       id,
       name: String(loaded.manifest.name || loaded.manifest.displayName || id),
       manifest: loaded.manifest,
       manifestFile: loaded.fileName,
-      installation,
-      removable: installation === 'user',
-      assetBaseUrl: `${PETPACK_SCHEME}://${installation}/${encodeURIComponent(entry.name)}/`,
+      installation: 'user',
+      removable: true,
+      assetBaseUrl: `${PETPACK_SCHEME}://${collection}/${encodeURIComponent(entry.name)}/`,
     });
   }
 
-  return pets;
+  return packs;
 }
 
 function loadPetCatalog() {
-  const builtinPets = readCatalogRoot(runtimeConfig.petpacksDirectory, 'builtin');
-  const userPets = readCatalogRoot(runtimeConfig.userPetpacksDirectory, 'user');
-  const seenIds = new Set();
-  const pets = [];
-
-  // Built-ins are trusted application resources and cannot be shadowed by a
-  // manually copied user directory with the same manifest id.
-  for (const pet of [...builtinPets, ...userPets]) {
-    const key = pet.id.toLowerCase();
-    if (seenIds.has(key)) continue;
-    seenIds.add(key);
-    pets.push(pet);
-  }
-
+  const pets = readCatalogRoot(
+    runtimeConfig.userPetpacksDirectory,
+    'pets',
+    'com.baofeifei.petpack',
+  );
+  const items = readCatalogRoot(
+    runtimeConfig.userItempacksDirectory,
+    'items',
+    'com.petdesktop.itempack',
+  );
   pets.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
+  items.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
   return {
-    schemaVersion: 1,
-    rootKind: runtimeConfig.rootKind,
+    schemaVersion: 2,
+    runtimeMode: 'empty-shell',
     roots: {
-      builtin: runtimeConfig.rootKind,
-      user: 'userData',
+      pets: 'userData/petpacks',
+      items: 'userData/itempacks',
     },
     pets,
+    items,
   };
 }
 
@@ -602,8 +603,8 @@ function startCatalogWatchers() {
   };
 
   for (const directory of [
-    runtimeConfig.petpacksDirectory,
     runtimeConfig.userPetpacksDirectory,
+    runtimeConfig.userItempacksDirectory,
   ]) {
     if (!fs.existsSync(directory)) continue;
     try {
@@ -621,6 +622,7 @@ function startCatalogWatchers() {
 }
 
 let petpackLibraryPromise = null;
+let itempackLibraryPromise = null;
 
 function loadPetpackLibrary() {
   if (!fs.existsSync(runtimeConfig.petpackLibrary)) {
@@ -630,6 +632,16 @@ function loadPetpackLibrary() {
     petpackLibraryPromise = import(pathToFileURL(runtimeConfig.petpackLibrary).href);
   }
   return petpackLibraryPromise;
+}
+
+function loadItempackLibrary() {
+  if (!fs.existsSync(runtimeConfig.itempackLibrary)) {
+    throw new Error(`ITEMPACK_RUNTIME_MISSING: ${runtimeConfig.itempackLibrary}`);
+  }
+  if (!itempackLibraryPromise) {
+    itempackLibraryPromise = import(pathToFileURL(runtimeConfig.itempackLibrary).href);
+  }
+  return itempackLibraryPromise;
 }
 
 function asIpcError(error, fallbackCode) {
@@ -667,16 +679,6 @@ async function importPetpack(event) {
     if (!PET_ID_PATTERN.test(petId)) {
       throw Object.assign(new Error('Manifest id is invalid'), { code: 'INVALID_ID' });
     }
-    if (
-      readCatalogRoot(runtimeConfig.petpacksDirectory, 'builtin').some(
-        (pet) => pet.id.toLowerCase() === petId.toLowerCase(),
-      )
-    ) {
-      throw Object.assign(new Error(`Built-in pet ${petId} already exists`), {
-        code: 'BUILTIN_ID_CONFLICT',
-      });
-    }
-
     fs.mkdirSync(runtimeConfig.userPetpacksDirectory, { recursive: true });
     const destination = path.join(runtimeConfig.userPetpacksDirectory, petId);
     await library.importBundle(source, destination);
@@ -690,6 +692,51 @@ async function importPetpack(event) {
     };
   } catch (error) {
     throw asIpcError(error, 'PETPACK_IMPORT_FAILED');
+  }
+}
+
+async function importItempack(event) {
+  assertTrustedSender(event);
+  const owner =
+    controlWindow && !controlWindow.isDestroyed() && controlWindow.isVisible()
+      ? controlWindow
+      : undefined;
+  const options = {
+    title: '导入互动道具包',
+    properties: ['openFile'],
+    filters: [
+      { name: '桌宠道具包', extensions: ['itempack'] },
+      { name: '所有文件', extensions: ['*'] },
+    ],
+  };
+  const selection = owner
+    ? await dialog.showOpenDialog(owner, options)
+    : await dialog.showOpenDialog(options);
+  if (selection.canceled || selection.filePaths.length === 0) {
+    return { ok: false, cancelled: true };
+  }
+
+  try {
+    const library = await loadItempackLibrary();
+    const source = selection.filePaths[0];
+    const validation = await library.validateItempack(source);
+    const itempackId = validation.manifest.id;
+    if (!PET_ID_PATTERN.test(itempackId)) {
+      throw Object.assign(new Error('Manifest id is invalid'), { code: 'INVALID_ID' });
+    }
+    fs.mkdirSync(runtimeConfig.userItempacksDirectory, { recursive: true });
+    const destination = path.join(runtimeConfig.userItempacksDirectory, itempackId);
+    await library.importItempack(source, destination);
+    const catalog = notifyCatalogChanged();
+    return {
+      ok: true,
+      cancelled: false,
+      itempackId,
+      manifest: validation.manifest,
+      catalog,
+    };
+  } catch (error) {
+    throw asIpcError(error, 'ITEMPACK_IMPORT_FAILED');
   }
 }
 
@@ -730,6 +777,47 @@ async function removePetpack(event, inputId) {
     return { ok: true, removed: true, petId, catalog };
   } catch (error) {
     throw asIpcError(error, 'PETPACK_REMOVE_FAILED');
+  }
+}
+
+async function removeItempack(event, inputId) {
+  assertTrustedSender(event);
+  const itempackId = typeof inputId === 'string' ? inputId : '';
+  if (!PET_ID_PATTERN.test(itempackId)) {
+    throw new Error('INVALID_ID: Item pack id is invalid');
+  }
+  const root = path.resolve(runtimeConfig.userItempacksDirectory);
+  const target = path.resolve(root, itempackId);
+  if (!isInside(root, target) || target === root) {
+    throw new Error('UNSAFE_PATH: Refusing to remove an unsafe itempack path');
+  }
+
+  let info;
+  try {
+    info = fs.lstatSync(target);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return { ok: true, removed: false, itempackId, catalog: loadPetCatalog() };
+    }
+    throw asIpcError(error, 'ITEMPACK_REMOVE_FAILED');
+  }
+  if (!info.isDirectory() || info.isSymbolicLink()) {
+    throw new Error('UNSAFE_PATH: User itempack is not a regular directory');
+  }
+  const loaded = readManifest(target);
+  if (
+    !loaded ||
+    loaded.manifest.format !== 'com.petdesktop.itempack' ||
+    String(loaded.manifest.id).toLowerCase() !== itempackId.toLowerCase()
+  ) {
+    throw new Error('INVALID_MANIFEST: User itempack manifest id does not match its directory');
+  }
+  try {
+    await fs.promises.rm(target, { recursive: true, force: false, maxRetries: 2 });
+    const catalog = notifyCatalogChanged();
+    return { ok: true, removed: true, itempackId, catalog };
+  } catch (error) {
+    throw asIpcError(error, 'ITEMPACK_REMOVE_FAILED');
   }
 }
 
@@ -793,8 +881,20 @@ function refreshHitTest() {
       localY >= region.y &&
       localY <= region.y + region.height,
   );
+  // The action dock has a stable native fallback so it remains clickable even
+  // when Windows briefly reports a transparent Electron pixel as belonging to
+  // the window underneath. The renderer still reports its exact bounds; this
+  // small strip only covers the visible dock at the bottom center.
+  const insideControlDock =
+    localY >= bounds.height - CONTROL_DOCK_HEIGHT &&
+    localX >= bounds.width / 2 - CONTROL_DOCK_HALF_WIDTH &&
+    localX <= bounds.width / 2 + CONTROL_DOCK_HALF_WIDTH;
+  const insideHoverGrace = Date.now() < hitTestState.hoverGraceUntil;
 
-  applyMousePolicy(!(insideReportedRegion || hitTestState.hovered), true);
+  applyMousePolicy(
+    !(insideReportedRegion || insideControlDock || hitTestState.hovered || insideHoverGrace),
+    true,
+  );
 }
 
 function startHitTestLoop() {
@@ -840,6 +940,8 @@ function registerIpc() {
   });
   ipcMain.handle(IPC.IMPORT_PETPACK, importPetpack);
   ipcMain.handle(IPC.REMOVE_PETPACK, removePetpack);
+  ipcMain.handle(IPC.IMPORT_ITEMPACK, importItempack);
+  ipcMain.handle(IPC.REMOVE_ITEMPACK, removeItempack);
   ipcMain.handle(IPC.LOAD_STATE, (event) => {
     assertTrustedSender(event);
     return store.loadRendererState();
@@ -858,6 +960,9 @@ function registerIpc() {
   ipcMain.handle(IPC.SET_POINTER_HOVER, (event, hovered) => {
     assertOverlaySender(event);
     hitTestState.hovered = Boolean(hovered);
+    if (hitTestState.hovered) {
+      hitTestState.hoverGraceUntil = Date.now() + HOVER_GRACE_MS;
+    }
     hitTestState.mode = hitTestState.regions.length > 0 ? 'regions' : 'hover';
     refreshHitTest();
     return hitTestState.hovered;
@@ -884,17 +989,24 @@ function registerIpc() {
     if (typeof input.visible === 'boolean') return setOverlayVisible(input.visible);
     return shellStatePayload();
   });
+  ipcMain.handle(IPC.QUIT_APP, (event) => {
+    assertTrustedSender(event);
+    isQuitting = true;
+    app.quit();
+    return true;
+  });
 }
 
 async function bootstrap() {
   app.setName(APP_NAME);
   if (process.platform === 'win32') {
-    app.setAppUserModelId('com.baobao-feifei.desktop-pets');
+    app.setAppUserModelId('com.sharingyu.petdesktop');
   }
 
   runtimeConfig = buildRuntimeConfig();
   store = new AtomicJsonStore(path.join(app.getPath('userData'), 'desktop-state.json'));
   fs.mkdirSync(runtimeConfig.userPetpacksDirectory, { recursive: true });
+  fs.mkdirSync(runtimeConfig.userItempacksDirectory, { recursive: true });
 
   await protocol.handle(PETPACK_SCHEME, handlePetpackRequest);
   registerIpc();

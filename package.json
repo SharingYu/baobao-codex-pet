@@ -1,6 +1,6 @@
 {
-  "name": "baobao-feifei-desktop-pet",
-  "version": "0.1.0-alpha",
+  "name": "pet-desktop-companion",
+  "version": "0.2.0-alpha",
   "private": true,
   "description": "A calm Windows desktop companion powered by custom pet packs.",
   "main": "apps/desktop/electron/main.cjs",
@@ -15,18 +15,24 @@
     "dev": "concurrently -k -s first \"pnpm dev:renderer\" \"pnpm dev:electron\"",
     "dev:renderer": "vite --config apps/desktop/vite.config.mjs --host 127.0.0.1",
     "dev:electron": "wait-on tcp:127.0.0.1:5173 && cross-env PET_DESKTOP_DEV_URL=http://127.0.0.1:5173 electron .",
+    "build:icon": "node tools/build-icon.mjs",
     "build": "pnpm build:renderer",
     "build:renderer": "vite build --config apps/desktop/vite.config.mjs",
-    "check": "node --check apps/desktop/electron/main.cjs && node --check apps/desktop/electron/preload.cjs && node --check apps/desktop/electron/petpack-compat.cjs && node --check apps/desktop/renderer/main.js && node --check apps/desktop/renderer/bridge.js && node --test tools/petpack/test/*.test.mjs",
-    "pack": "pnpm build && electron-builder --dir",
-    "dist:win": "pnpm build && electron-builder --win nsis",
-    "dist:portable": "pnpm build && electron-builder --win portable -c.artifactName=PetDesktop-Portable-${version}-${arch}.${ext}"
+    "check": "node --check apps/desktop/electron/main.cjs && node --check apps/desktop/electron/preload.cjs && node --check apps/desktop/electron/petpack-compat.cjs && node --check apps/desktop/renderer/main.js && node --check apps/desktop/renderer/bridge.js && node --check tools/itempack/lib.mjs && node --check tools/verify-packaged-shell.mjs && node --check tools/write-release-checksums.mjs && node --test tools/petpack/test/*.test.mjs tools/itempack/test/*.test.mjs",
+    "verify:package": "node tools/verify-packaged-shell.mjs",
+    "release:checksums": "node tools/write-release-checksums.mjs",
+    "pack:win": "pnpm check && pnpm build && electron-builder --dir && pnpm verify:package",
+    "dist:win": "pnpm check && pnpm build && electron-builder --win nsis && pnpm verify:package",
+    "dist:portable": "pnpm check && pnpm build && electron-builder --win portable -c.artifactName=PetDesktop-Portable-${version}-${arch}.${ext} && pnpm verify:package"
   },
   "devDependencies": {
+    "@electron/asar": "3.4.1",
+    "@resvg/resvg-js": "^2.6.2",
     "concurrently": "^9.2.1",
     "cross-env": "^10.0.0",
     "electron": "^38.1.2",
     "electron-builder": "^26.0.12",
+    "lucide-static": "^1.24.0",
     "vite": "^7.1.7",
     "wait-on": "^8.0.4"
   },
@@ -41,6 +47,7 @@
     "files": [
       "apps/desktop/electron/**/*",
       "apps/desktop/dist/**/*",
+      "build/icon.png",
       "LICENSE",
       "NOTICE.md",
       "LICENSES/**/*",
@@ -48,15 +55,19 @@
     ],
     "extraResources": [
       {
-        "from": "petpacks",
-        "to": "petpacks",
+        "from": "tools/petpack/lib.mjs",
+        "to": "petpack-runtime/lib.mjs"
+      },
+      {
+        "from": "tools/itempack",
+        "to": "itempack-runtime",
         "filter": [
-          "**/*"
+          "lib.mjs"
         ]
       },
       {
         "from": "tools/petpack/lib.mjs",
-        "to": "petpack-runtime/lib.mjs"
+        "to": "itempack-runtime/petpack-lib.mjs"
       }
     ],
     "win": {

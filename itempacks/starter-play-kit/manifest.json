@@ -1,0 +1,65 @@
+{
+  "$schema": "../../packages/item-schema/itempack.v1.schema.json",
+  "format": "com.petdesktop.itempack",
+  "manifestVersion": "1.0",
+  "id": "starter-play-kit",
+  "displayName": "暖阳互动玩具盒",
+  "description": "可独立安装的三件起步互动素材：鲑鱼零食、毛线球与纸箱小屋。",
+  "license": "MIT",
+  "assets": [
+    {
+      "id": "salmon-treat-art",
+      "path": "assets/salmon-treat.png",
+      "mediaType": "image/png",
+      "bytes": 174406,
+      "sha256": "51ebe60d6384b2035da04f3c52d4aacbebfc194cb715ec8bf869f5662b7760d1",
+      "width": 578,
+      "height": 520
+    },
+    {
+      "id": "yarn-ball-art",
+      "path": "assets/coral-yarn-ball.png",
+      "mediaType": "image/png",
+      "bytes": 278736,
+      "sha256": "b624be8a05aa39b495f213aca72517b8b4b88bfdb0de70b64a8c61080f91826c",
+      "width": 610,
+      "height": 640
+    },
+    {
+      "id": "cat-house-art",
+      "path": "assets/cat-house.png",
+      "mediaType": "image/png",
+      "bytes": 350539,
+      "sha256": "9914daedd66f0e12bf161ded366dd60e35ae6f7ebe82a1f0fd3d5e58205f3aef",
+      "width": 635,
+      "height": 700
+    }
+  ],
+  "previewAsset": "yarn-ball-art",
+  "items": [
+    {
+      "id": "salmon-treat",
+      "displayName": "鲑鱼小零食",
+      "category": "food",
+      "behavior": "treat",
+      "asset": "salmon-treat-art",
+      "scale": 1
+    },
+    {
+      "id": "coral-yarn-ball",
+      "displayName": "珊瑚毛线球",
+      "category": "toy",
+      "behavior": "ball",
+      "asset": "yarn-ball-art",
+      "scale": 1
+    },
+    {
+      "id": "cat-house",
+      "displayName": "纸箱小屋",
+      "category": "toy",
+      "behavior": "hideout",
+      "asset": "cat-house-art",
+      "scale": 1.1
+    }
+  ]
+}

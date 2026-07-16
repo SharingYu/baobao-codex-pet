@@ -1,0 +1,10 @@
+{
+  "name": "@petdesktop/item-schema",
+  "version": "0.2.0",
+  "private": true,
+  "files": ["itempack.v1.schema.json", "types.d.ts", "README.md"],
+  "exports": {
+    "./itempack.v1.schema.json": "./itempack.v1.schema.json",
+    "./types": { "types": "./types.d.ts" }
+  }
+}
