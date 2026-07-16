@@ -213,3 +213,26 @@ test('the checked-in JSON Schema is valid JSON and pins v1 constants', async () 
   assert.equal(schema.properties.manifestVersion.const, '1.0');
   assert.equal(schema.properties.assets.maxItems, 64);
 });
+
+
+test('validates normalized touch zones and their event references', () => {
+  const manifest = sampleManifest();
+  manifest.interactions.eventMap['pet-head'] = 'idle';
+  manifest.interactions.touchZones = [{
+    id: 'head',
+    label: 'Head',
+    event: 'pet-head',
+    x: 0.2,
+    y: 0.1,
+    width: 0.6,
+    height: 0.35,
+  }];
+  assert.doesNotThrow(() => validateBundleEntries(sampleEntries(manifest)));
+
+  const invalid = structuredClone(manifest);
+  invalid.interactions.touchZones[0].event = 'missing-event';
+  assert.throws(
+    () => validateBundleEntries(sampleEntries(invalid)),
+    (error) => error?.code === 'INVALID_REFERENCE',
+  );
+});

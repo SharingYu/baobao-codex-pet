@@ -7,7 +7,7 @@
   "description": "蓝金三花英短，白胸粉鼻。",
   "license": "LicenseRef-Personal-Display-Only",
   "source": {
-    "kind": "codex-v2",
+    "kind": "native",
     "spriteVersionNumber": 2
   },
   "assets": [
@@ -15,10 +15,10 @@
       "id": "atlas",
       "path": "assets/atlas.webp",
       "mediaType": "image/webp",
-      "bytes": 2378940,
-      "sha256": "97bd11f1a577fd5cd14520aa775cc440141c10b069aadf06f9e7279bd2d67d4a",
+      "bytes": 3498062,
+      "sha256": "259636694a7701a3fb62f33ce609ade8fdb595137ce0da17d4db9ece08b299d4",
       "width": 1536,
-      "height": 2288
+      "height": 3120
     }
   ],
   "renderer": {
@@ -27,7 +27,7 @@
     "cellWidth": 192,
     "cellHeight": 208,
     "columns": 8,
-    "rows": 11,
+    "rows": 15,
     "anchor": {
       "x": 0.5,
       "y": 1
@@ -219,6 +219,102 @@
           280
         ],
         "loop": true
+      },
+      "pet-head": {
+        "row": 11,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "frameDurationsMs": [
+          140,
+          110,
+          110,
+          110,
+          110,
+          130,
+          160,
+          260
+        ],
+        "loop": false
+      },
+      "pet-back": {
+        "row": 12,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "frameDurationsMs": [
+          140,
+          110,
+          110,
+          110,
+          110,
+          130,
+          160,
+          260
+        ],
+        "loop": false
+      },
+      "pet-tail": {
+        "row": 13,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "frameDurationsMs": [
+          140,
+          110,
+          110,
+          110,
+          110,
+          130,
+          160,
+          260
+        ],
+        "loop": false
+      },
+      "eat": {
+        "row": 14,
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "frameDurationsMs": [
+          140,
+          110,
+          110,
+          110,
+          110,
+          130,
+          160,
+          260
+        ],
+        "loop": false
       }
     },
     "lookDirections": [
@@ -309,15 +405,64 @@
       "idle": "idle",
       "move-right": "running-right",
       "move-left": "running-left",
-        "greet": "waving",
-        "pet": "waving",
-        "feed": "jumping",
-        "play": "jumping",
-        "jump": "jumping",
+      "greet": "waving",
+      "pet": "pet-head",
+      "feed": "eat",
+      "play": "jumping",
+      "jump": "jumping",
       "error": "failed",
       "waiting": "waiting",
       "working": "running",
-      "review": "review"
-    }
+      "review": "review",
+      "pet-head": "pet-head",
+      "pet-back": "pet-back",
+      "pet-tail": "pet-tail",
+      "pet-body": "waving",
+      "eat": "eat",
+      "play-ball": "running",
+      "play-hideout": "waiting",
+      "platform-walk-left": "running-left",
+      "platform-walk-right": "running-right",
+      "fall": "jumping",
+      "land": "waving"
+    },
+    "touchZones": [
+      {
+        "id": "head",
+        "label": "头",
+        "event": "pet-head",
+        "x": 0.22,
+        "y": 0.12,
+        "width": 0.56,
+        "height": 0.3
+      },
+      {
+        "id": "back",
+        "label": "背",
+        "event": "pet-back",
+        "x": 0.16,
+        "y": 0.4,
+        "width": 0.68,
+        "height": 0.3
+      },
+      {
+        "id": "tail",
+        "label": "尾巴",
+        "event": "pet-tail",
+        "x": 0.7,
+        "y": 0.54,
+        "width": 0.3,
+        "height": 0.36
+      },
+      {
+        "id": "body",
+        "label": "身体",
+        "event": "pet-body",
+        "x": 0.18,
+        "y": 0.3,
+        "width": 0.64,
+        "height": 0.62
+      }
+    ]
   }
 }

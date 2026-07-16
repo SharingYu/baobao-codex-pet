@@ -316,7 +316,7 @@ function validateManifestShape(manifest) {
   }
 
   const interactions = requireObject(manifest.interactions, 'manifest.interactions');
-  requireKeys(interactions, ['eventMap'], new Set(['eventMap']), 'manifest.interactions');
+  requireKeys(interactions, ['eventMap'], new Set(['eventMap', 'touchZones']), 'manifest.interactions');
   const eventMap = requireObject(interactions.eventMap, 'manifest.interactions.eventMap');
   const eventNames = Object.keys(eventMap);
   if (eventNames.length < 1 || eventNames.length > 64) fail('INVALID_MANIFEST', 'interactions.eventMap must contain 1-64 entries');
@@ -328,6 +328,35 @@ function validateManifestShape(manifest) {
     }
   }
   if (!Object.hasOwn(eventMap, 'idle')) fail('INVALID_MANIFEST', 'interactions.eventMap.idle is required');
+  if (Object.hasOwn(interactions, 'touchZones')) {
+    if (!Array.isArray(interactions.touchZones) || interactions.touchZones.length < 1 || interactions.touchZones.length > 12) {
+      fail('INVALID_MANIFEST', 'interactions.touchZones must contain 1-12 normalized rectangles');
+    }
+    const zoneIds = new Set();
+    interactions.touchZones.forEach((zone, index) => {
+      const pointer = `manifest.interactions.touchZones[${index}]`;
+      requireObject(zone, pointer);
+      requireKeys(
+        zone,
+        ['id', 'event', 'x', 'y', 'width', 'height'],
+        new Set(['id', 'label', 'event', 'x', 'y', 'width', 'height']),
+        pointer,
+      );
+      requireString(zone.id, `${pointer}.id`, 1, 64, SLUG);
+      if (Object.hasOwn(zone, 'label')) requireString(zone.label, `${pointer}.label`, 1, 40);
+      requireString(zone.event, `${pointer}.event`, 1, 64, SLUG);
+      if (!Object.hasOwn(eventMap, zone.event)) fail('INVALID_REFERENCE', `${pointer}.event does not reference eventMap`);
+      requireNumber(zone.x, `${pointer}.x`, 0, 1);
+      requireNumber(zone.y, `${pointer}.y`, 0, 1);
+      requireNumber(zone.width, `${pointer}.width`, Number.EPSILON, 1);
+      requireNumber(zone.height, `${pointer}.height`, Number.EPSILON, 1);
+      if (zone.x + zone.width > 1 || zone.y + zone.height > 1) {
+        fail('INVALID_MANIFEST', `${pointer} must stay inside normalized pet bounds`);
+      }
+      if (zoneIds.has(zone.id.toLowerCase())) fail('INVALID_MANIFEST', `Duplicate touch zone id ${zone.id}`);
+      zoneIds.add(zone.id.toLowerCase());
+    });
+  }
 
   const atlas = manifest.assets.find((asset) => asset.id.toLowerCase() === renderer.atlasAsset.toLowerCase());
   if (!Object.hasOwn(atlas, 'width') || !Object.hasOwn(atlas, 'height')) {

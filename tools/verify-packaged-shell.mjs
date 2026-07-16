@@ -18,6 +18,7 @@ const allowedResourceFiles = new Set([
   'itempack-runtime/lib.mjs',
   'itempack-runtime/petpack-lib.mjs',
   'petpack-runtime/lib.mjs',
+  'windows-platforms.ps1',
 ]);
 
 async function listFiles(directory, prefix = '') {

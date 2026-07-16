@@ -36,6 +36,16 @@ export interface SpriteAtlasRendererV1 {
   lookDirections?: LookDirectionV1[];
 }
 
+export interface PetTouchZoneV1 {
+  id: string;
+  label?: string;
+  event: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface PetpackManifestV1 {
   $schema?: string;
   format: 'com.baofeifei.petpack';
@@ -53,5 +63,6 @@ export interface PetpackManifestV1 {
   renderer: SpriteAtlasRendererV1;
   interactions: {
     eventMap: Record<string, string>;
+    touchZones?: PetTouchZoneV1[];
   };
 }

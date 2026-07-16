@@ -94,6 +94,14 @@ export const petBridge = {
     return invokeFirst(["setShellState"], patch);
   },
 
+  async getWindowPlatforms() {
+    return invokeFirst(["getWindowPlatforms"]);
+  },
+
+  async setWindowPlatformInteractions(enabled) {
+    return invokeFirst(["setWindowPlatformInteractions"], Boolean(enabled));
+  },
+
   async quitApp() {
     return invokeRequired(["quitApp", "exitApp"]);
   },
@@ -170,6 +178,18 @@ export const petBridge = {
       }
     }
     return undefined;
+  },
+
+  onQuitRequested(callback) {
+    const native = getNativeBridge();
+    if (!native || typeof native.onQuitRequested !== "function") return () => {};
+    try {
+      const unsubscribe = native.onQuitRequested(callback);
+      return typeof unsubscribe === "function" ? unsubscribe : () => {};
+    } catch (error) {
+      console.warn("[petDesktop] onQuitRequested subscription failed", error);
+      return () => {};
+    }
   },
 
   onStateChanged(callback) {

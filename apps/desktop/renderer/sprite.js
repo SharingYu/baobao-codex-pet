@@ -14,20 +14,41 @@ export const ANIMATIONS = Object.freeze({
 });
 
 export function frameAt(animation, elapsedMs, reducedMotion = false) {
-  if (reducedMotion) return 0;
-  const total = animation.durations.reduce((sum, value) => sum + value, 0);
-  let cursor = ((elapsedMs % total) + total) % total;
-  for (let index = 0; index < animation.durations.length; index += 1) {
-    cursor -= animation.durations[index];
+  const source = animation?.durations ?? animation?.frameDurationsMs;
+  const durations = Array.isArray(source) ? source.map((value) => Math.max(24, Number(value) || 120)) : [];
+  if (reducedMotion || durations.length === 0) return 0;
+  const total = durations.reduce((sum, value) => sum + value, 0);
+  if (animation?.loop === false && elapsedMs >= total) return durations.length - 1;
+  let cursor = animation?.loop === false
+    ? Math.max(0, Number(elapsedMs) || 0)
+    : ((((Number(elapsedMs) || 0) % total) + total) % total);
+  for (let index = 0; index < durations.length; index += 1) {
+    cursor -= durations[index];
     if (cursor < 0) return index;
   }
-  return animation.durations.length - 1;
+  return durations.length - 1;
 }
 
-export function lookCellForVector(dx, dy) {
+function circularDistance(a, b) {
+  return Math.abs((((a - b) % 360) + 540) % 360 - 180);
+}
+
+export function lookCellForVector(dx, dy, lookDirections) {
   if (Math.hypot(dx, dy) < 8) return null;
   const degrees = (Math.atan2(dx, -dy) * 180) / Math.PI;
   const normalized = (degrees + 360) % 360;
+  const declared = Array.isArray(lookDirections)
+    ? lookDirections.filter((entry) => Number.isFinite(Number(entry?.degrees))
+      && Number.isInteger(Number(entry?.row))
+      && Number.isInteger(Number(entry?.column)))
+    : [];
+  if (declared.length) {
+    const closest = declared.reduce((best, entry) => {
+      const distance = circularDistance(normalized, Number(entry.degrees));
+      return !best || distance < best.distance ? { entry, distance } : best;
+    }, null)?.entry;
+    return closest ? { row: Number(closest.row), column: Number(closest.column) } : null;
+  }
   const index = Math.round(normalized / 22.5) % 16;
   return {
     row: index < 8 ? 9 : 10,
@@ -35,16 +56,18 @@ export function lookCellForVector(dx, dy) {
   };
 }
 
-export function drawSpriteFrame(context, image, row, column, bounds, alpha = 1) {
+export function drawSpriteFrame(context, image, row, column, bounds, alpha = 1, renderer = {}) {
   if (!image?.complete || !image.naturalWidth) return false;
+  const cellWidth = Math.max(1, Number(renderer?.cellWidth) || CELL_WIDTH);
+  const cellHeight = Math.max(1, Number(renderer?.cellHeight) || CELL_HEIGHT);
   context.save();
   context.globalAlpha = alpha;
   context.drawImage(
     image,
-    column * CELL_WIDTH,
-    row * CELL_HEIGHT,
-    CELL_WIDTH,
-    CELL_HEIGHT,
+    column * cellWidth,
+    row * cellHeight,
+    cellWidth,
+    cellHeight,
     bounds.x,
     bounds.y,
     bounds.width,

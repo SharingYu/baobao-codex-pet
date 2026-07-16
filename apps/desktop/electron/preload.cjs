@@ -20,6 +20,9 @@ const IPC = Object.freeze({
   GET_SHELL_STATE: 'pet-desktop:shell:get-state',
   SET_SHELL_STATE: 'pet-desktop:shell:set-state',
   SHELL_STATE_CHANGED: 'pet-desktop:shell:state-changed',
+  GET_WINDOW_PLATFORMS: 'pet-desktop:platforms:get',
+  SET_WINDOW_PLATFORM_INTERACTIONS: 'pet-desktop:platforms:set-enabled',
+  QUIT_REQUESTED: 'pet-desktop:shell:quit-requested',
   QUIT_APP: 'pet-desktop:shell:quit',
 });
 
@@ -53,10 +56,14 @@ const api = Object.freeze({
 
   getShellState: () => ipcRenderer.invoke(IPC.GET_SHELL_STATE),
   setShellState: (patch) => ipcRenderer.invoke(IPC.SET_SHELL_STATE, patch),
+  getWindowPlatforms: () => ipcRenderer.invoke(IPC.GET_WINDOW_PLATFORMS),
+  setWindowPlatformInteractions: (enabled) =>
+    ipcRenderer.invoke(IPC.SET_WINDOW_PLATFORM_INTERACTIONS, Boolean(enabled)),
   quitApp: () => ipcRenderer.invoke(IPC.QUIT_APP),
 
   onPetCatalogChanged: (listener) => subscribe(IPC.PET_CATALOG_CHANGED, listener),
   onShellStateChanged: (listener) => subscribe(IPC.SHELL_STATE_CHANGED, listener),
+  onQuitRequested: (listener) => subscribe(IPC.QUIT_REQUESTED, listener),
 });
 
 contextBridge.exposeInMainWorld('petDesktop', api);

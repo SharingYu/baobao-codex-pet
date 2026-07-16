@@ -163,7 +163,7 @@ function validateManifest(manifest) {
   manifest.items.forEach((item, index) => {
     const pointer = `manifest.items[${index}]`;
     requireObject(item, pointer);
-    requireKeys(item, ['id', 'displayName', 'category', 'behavior', 'asset', 'scale'], new Set(['id', 'displayName', 'category', 'behavior', 'asset', 'scale']), pointer);
+    requireKeys(item, ['id', 'displayName', 'category', 'behavior', 'asset', 'scale'], new Set(['id', 'displayName', 'category', 'behavior', 'asset', 'scale', 'unlockLevel']), pointer);
     requireString(item.id, `${pointer}.id`, 1, 64, SLUG);
     requireString(item.displayName, `${pointer}.displayName`, 1, 60);
     if (!Object.hasOwn(ITEM_BEHAVIORS, item.category)) fail('INVALID_MANIFEST', `${pointer}.category is unsupported`);
@@ -171,6 +171,9 @@ function validateManifest(manifest) {
     requireString(item.asset, `${pointer}.asset`, 1, 64, SLUG);
     if (!assetIds.has(item.asset.toLowerCase())) fail('INVALID_REFERENCE', `${pointer}.asset does not reference an asset`);
     requireNumber(item.scale, `${pointer}.scale`, 0.35, 2.5);
+    if (Object.hasOwn(item, 'unlockLevel')) {
+      requireNumber(item.unlockLevel, `${pointer}.unlockLevel`, 1, 5, true);
+    }
     if (itemIds.has(item.id.toLowerCase())) fail('INVALID_MANIFEST', `Duplicate item id ${item.id}`);
     itemIds.add(item.id.toLowerCase());
   });

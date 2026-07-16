@@ -11,6 +11,7 @@ function makeDefaultDocument() {
     schemaVersion: STORE_SCHEMA_VERSION,
     shell: {
       visible: true,
+      interactionBarVisible: true,
       quiet: false,
       displayId: null,
     },
@@ -44,6 +45,8 @@ function normalizeShellState(value) {
 
   return {
     visible: typeof input.visible === 'boolean' ? input.visible : defaults.visible,
+    interactionBarVisible:
+      typeof input.interactionBarVisible === 'boolean' ? input.interactionBarVisible : defaults.interactionBarVisible,
     quiet: typeof input.quiet === 'boolean' ? input.quiet : defaults.quiet,
     displayId:
       typeof input.displayId === 'number' || typeof input.displayId === 'string'

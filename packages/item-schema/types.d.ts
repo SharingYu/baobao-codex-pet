@@ -19,6 +19,7 @@ export interface ItempackItemV1 {
   behavior: ItempackBehavior;
   asset: string;
   scale: number;
+  unlockLevel?: 1 | 2 | 3 | 4 | 5;
 }
 
 export interface ItempackManifestV1 {
