@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "campaign": "first-internal-test",
+  "deterministicSceneVersion": 2,
+  "copyVersion": 1,
+  "copyEntryCount": 57,
+  "note": "Video container support is selected by the installed Electron/Chromium MediaRecorder.",
+  "sources": [
+    {
+      "id": "marketing-copy-data",
+      "kind": "machine-copy-source",
+      "path": "marketing/copy-data.mjs",
+      "mediaType": "text/javascript; charset=utf-8",
+      "bytes": 3613,
+      "sha256": "05dc4536f103783f78091d34e41f3746e6a97e2976a7ec294f40f0b3a3b380bc"
+    },
+    {
+      "id": "marketing-copy-doc",
+      "kind": "human-copy-mirror",
+      "path": "marketing/copy.md",
+      "mediaType": "text/markdown; charset=utf-8",
+      "bytes": 3452,
+      "sha256": "8da1b218dfab3c65835977f7feac7b3cf357ea92e48f4b6344cf3c729b32403b"
+    },
+    {
+      "id": "desktop-v03",
+      "kind": "real-product-screenshot",
+      "path": "docs/assets/desktop-v03.png",
+      "mediaType": "image/png",
+      "bytes": 234002,
+      "sha256": "2c3496fd0cb9387f8a70a7fd0847a341b72a618d55a48a108f480a93812c427c",
+      "width": 2560,
+      "height": 1392
+    },
+    {
+      "id": "baobao-manifest",
+      "kind": "pet-manifest",
+      "path": "petpacks/baobao/manifest.json",
+      "mediaType": "application/json",
+      "bytes": 8424,
+      "sha256": "55b8e3d7fa8843734a56dc9266798675ee8f6b34ef55999be341b696d37f44fb"
+    },
+    {
+      "id": "atlas",
+      "kind": "baobao-atlas",
+      "path": "petpacks/baobao/assets/atlas.webp",
+      "mediaType": "image/webp",
+      "bytes": 4126636,
+      "sha256": "3d9700e10542f683a0fb6090675165a06a13f11628e2c621f499b1fcd301362b",
+      "width": 1536,
+      "height": 3120
+    },
+    {
+      "id": "feifei-manifest",
+      "kind": "pet-manifest",
+      "path": "petpacks/feifei/manifest.json",
+      "mediaType": "application/json",
+      "bytes": 8454,
+      "sha256": "7be001b516c30c87b204e488e6ad5cc87595c7019bad9003f4f7129d6ff95d99"
+    },
+    {
+      "id": "atlas",
+      "kind": "feifei-atlas",
+      "path": "petpacks/feifei/assets/atlas.webp",
+      "mediaType": "image/webp",
+      "bytes": 3498062,
+      "sha256": "259636694a7701a3fb62f33ce609ade8fdb595137ce0da17d4db9ece08b299d4",
+      "width": 1536,
+      "height": 3120
+    },
+    {
+      "id": "starter-play-kit-manifest",
+      "kind": "item-manifest",
+      "path": "itempacks/starter-play-kit/manifest.json",
+      "mediaType": "application/json",
+      "bytes": 2938,
+      "sha256": "d4d0862d05946733d03a7506cb607735a2967a13787b6750b5c3bbc6142174e0"
+    },
+    {
+      "id": "salmon-treat-art",
+      "kind": "item-salmon-treat-art",
+      "path": "itempacks/starter-play-kit/assets/salmon-treat.png",
+      "mediaType": "image/png",
+      "bytes": 174406,
+      "sha256": "51ebe60d6384b2035da04f3c52d4aacbebfc194cb715ec8bf869f5662b7760d1",
+      "width": 578,
+      "height": 520
+    },
+    {
+      "id": "milky-chicken-bites-art",
+      "kind": "item-milky-chicken-bites-art",
+      "path": "itempacks/starter-play-kit/assets/milky-chicken-bites.png",
+      "mediaType": "image/png",
+      "bytes": 355357,
+      "sha256": "53c110ea288af26783bbd47365f7c880d5ef3997e61586bcfe7b1ef5c241b71f",
+      "width": 640,
+      "height": 640
+    },
+    {
+      "id": "yarn-ball-art",
+      "kind": "item-yarn-ball-art",
+      "path": "itempacks/starter-play-kit/assets/coral-yarn-ball.png",
+      "mediaType": "image/png",
+      "bytes": 278736,
+      "sha256": "b624be8a05aa39b495f213aca72517b8b4b88bfdb0de70b64a8c61080f91826c",
+      "width": 610,
+      "height": 640
+    },
+    {
+      "id": "cat-house-art",
+      "kind": "item-cat-house-art",
+      "path": "itempacks/starter-play-kit/assets/cat-house.png",
+      "mediaType": "image/png",
+      "bytes": 350539,
+      "sha256": "9914daedd66f0e12bf161ded366dd60e35ae6f7ebe82a1f0fd3d5e58205f3aef",
+      "width": 635,
+      "height": 700
+    },
+    {
+      "id": "teaser-wand-art",
+      "kind": "item-teaser-wand-art",
+      "path": "itempacks/starter-play-kit/assets/teaser-wand.png",
+      "mediaType": "image/png",
+      "bytes": 580938,
+      "sha256": "09336dcec72fc6639850234776b01e5b0910d71bd7274e126ca874d7983487dd",
+      "width": 922,
+      "height": 1055
+    }
+  ],
+  "outputs": [
+    {
+      "file": "internal-test-portrait-01.png",
+      "mediaType": "image/png",
+      "bytes": 167713,
+      "sha256": "9da72505eaf0855d928420d37164aca46dad087ea24752f7a5afae3f9d13702f",
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "file": "internal-test-portrait-02.png",
+      "mediaType": "image/png",
+      "bytes": 173170,
+      "sha256": "8ed590464e1cc9e51bd30e7a45e873e1414b39d26dd892a57c1e9111172e7b4d",
+      "width": 1080,
+      "height": 1440
+    },
+    {
+      "file": "github-hero.png",
+      "mediaType": "image/png",
+      "bytes": 72485,
+      "sha256": "63e62333e9f3e76d4a43d24e3e7edfaf8aacc0ddf237228f863eba198c288f34",
+      "width": 1280,
+      "height": 640
+    },
+    {
+      "file": "internal-test-video.webm",
+      "mediaType": "video/webm;codecs=vp8",
+      "bytes": 4837850,
+      "sha256": "b47313a93898f961cf0191c42fd391b5c886adadb38753fc150b10aa9ae64f94",
+      "width": 1080,
+      "height": 1920,
+      "durationMs": 14000,
+      "fps": 30
+    }
+  ]
+}

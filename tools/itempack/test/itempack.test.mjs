@@ -159,3 +159,44 @@ test('refuses to overwrite an installed item pack', async (t) => {
     (error) => error instanceof ItempackError && error.code === 'DESTINATION_EXISTS',
   );
 });
+
+
+test('validates unlock levels from 1 through 5', async (t) => {
+  const fixture = await makeFixture('unlock-levels');
+  t.after(() => rm(fixture.root, { recursive: true, force: true }));
+  const manifestPath = path.join(fixture.root, 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.items[0].unlockLevel = 3;
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  assert.equal((await validateItempack(fixture.root)).manifest.items[0].unlockLevel, 3);
+
+  manifest.items[0].unlockLevel = 6;
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await assert.rejects(
+    () => validateItempack(fixture.root),
+    (error) => error instanceof ItempackError && error.code === 'INVALID_MANIFEST',
+  );
+});
+
+test('validates the five-item starter progression catalog', async () => {
+  const starterPath = path.resolve(import.meta.dirname, '../../../itempacks/starter-play-kit');
+  const report = await validateItempack(starterPath);
+  assert.equal(report.manifest.items.length, 5);
+  const levels = Object.fromEntries(report.manifest.items.map((item) => [item.id, item.unlockLevel]));
+  assert.deepEqual(levels, {
+    'salmon-treat': 1,
+    'milky-chicken-bites': 3,
+    'coral-yarn-ball': 1,
+    'cat-house': 2,
+    'teaser-wand': 4,
+  });
+  const bites = report.manifest.items.find((item) => item.id === 'milky-chicken-bites');
+  assert.equal(bites?.behavior, 'treat');
+  const bitesArt = report.manifest.assets.find((asset) => asset.id === bites?.asset);
+  assert.deepEqual([bitesArt?.width, bitesArt?.height], [640, 640]);
+  const wand = report.manifest.items.find((item) => item.id === 'teaser-wand');
+  assert.equal(wand?.behavior, 'wand');
+  assert.equal(wand?.scale, 1.15);
+  const wandArt = report.manifest.assets.find((asset) => asset.id === wand?.asset);
+  assert.deepEqual([wandArt?.width, wandArt?.height], [922, 1055]);
+});

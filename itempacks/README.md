@@ -7,4 +7,4 @@ node tools/itempack/cli.mjs validate itempacks/starter-play-kit
 node tools/itempack/cli.mjs pack itempacks/starter-play-kit release/itempacks/starter-play-kit.itempack
 ```
 
-`starter-play-kit` 提供一份真实可导入的食物、毛线球和纸箱小屋素材，用于验证“运行器 + 宠物包 + 道具包”分离交付。
+`starter-play-kit` 提供五件真实可导入素材：三文鱼零食、奶香鸡肉粒、毛线球、逗猫棒和纸箱小屋，用于验证投喂、追逐、逗玩、躲藏、解锁以及“运行器 + 宠物包 + 道具包”分离交付。

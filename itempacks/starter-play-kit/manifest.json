@@ -3,8 +3,8 @@
   "format": "com.petdesktop.itempack",
   "manifestVersion": "1.0",
   "id": "starter-play-kit",
-  "displayName": "暖阳互动玩具盒",
-  "description": "可独立安装的三件起步互动素材：鲑鱼零食、毛线球与纸箱小屋。",
+  "displayName": "暖阳五件互动盒",
+  "description": "可独立安装的五件起步互动素材：鲑鱼小零食、奶香鸡肉冻干、珊瑚毛线球、纸箱小屋与逗猫棒。",
   "license": "MIT",
   "assets": [
     {
@@ -15,6 +15,15 @@
       "sha256": "51ebe60d6384b2035da04f3c52d4aacbebfc194cb715ec8bf869f5662b7760d1",
       "width": 578,
       "height": 520
+    },
+    {
+      "id": "milky-chicken-bites-art",
+      "path": "assets/milky-chicken-bites.png",
+      "mediaType": "image/png",
+      "bytes": 355357,
+      "sha256": "53c110ea288af26783bbd47365f7c880d5ef3997e61586bcfe7b1ef5c241b71f",
+      "width": 640,
+      "height": 640
     },
     {
       "id": "yarn-ball-art",
@@ -33,6 +42,15 @@
       "sha256": "9914daedd66f0e12bf161ded366dd60e35ae6f7ebe82a1f0fd3d5e58205f3aef",
       "width": 635,
       "height": 700
+    },
+    {
+      "id": "teaser-wand-art",
+      "path": "assets/teaser-wand.png",
+      "mediaType": "image/png",
+      "bytes": 580938,
+      "sha256": "09336dcec72fc6639850234776b01e5b0910d71bd7274e126ca874d7983487dd",
+      "width": 922,
+      "height": 1055
     }
   ],
   "previewAsset": "yarn-ball-art",
@@ -43,7 +61,17 @@
       "category": "food",
       "behavior": "treat",
       "asset": "salmon-treat-art",
-      "scale": 1
+      "scale": 1,
+      "unlockLevel": 1
+    },
+    {
+      "id": "milky-chicken-bites",
+      "displayName": "奶香鸡肉冻干",
+      "category": "food",
+      "behavior": "treat",
+      "asset": "milky-chicken-bites-art",
+      "scale": 1.05,
+      "unlockLevel": 3
     },
     {
       "id": "coral-yarn-ball",
@@ -51,7 +79,8 @@
       "category": "toy",
       "behavior": "ball",
       "asset": "yarn-ball-art",
-      "scale": 1
+      "scale": 1,
+      "unlockLevel": 1
     },
     {
       "id": "cat-house",
@@ -59,7 +88,17 @@
       "category": "toy",
       "behavior": "hideout",
       "asset": "cat-house-art",
-      "scale": 1.1
+      "scale": 1.1,
+      "unlockLevel": 2
+    },
+    {
+      "id": "teaser-wand",
+      "displayName": "逗猫棒",
+      "category": "toy",
+      "behavior": "wand",
+      "asset": "teaser-wand-art",
+      "scale": 1.15,
+      "unlockLevel": 4
     }
   ]
 }

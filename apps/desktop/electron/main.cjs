@@ -1,5 +1,6 @@
 'use strict';
 
+const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { fileURLToPath, pathToFileURL } = require('node:url');
@@ -14,7 +15,14 @@ const {
   screen,
   Tray,
 } = require('electron');
-const { IPC } = require('./ipc-contract.cjs');
+const {
+  IPC,
+  buildWindowPlatformsPayload,
+  createBoundedLineDecoder,
+  createScreenToDipRectMapper,
+  exponentialBackoffDelay,
+  normalizeWindowPlatformRecords,
+} = require('./ipc-contract.cjs');
 const { assertAlphaRendererCompatibility } = require('./petpack-compat.cjs');
 const { AtomicJsonStore } = require('./state-store.cjs');
 
@@ -26,6 +34,17 @@ const HOVER_GRACE_MS = 240;
 const CONTROL_DOCK_HALF_WIDTH = 232;
 const CONTROL_DOCK_HEIGHT = 86;
 const PET_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const WINDOW_PLATFORM_WATCH_INTERVAL_MS = 120;
+const WINDOW_PLATFORM_STARTUP_TIMEOUT_MS = 4_000;
+const WINDOW_PLATFORM_STALL_TIMEOUT_MS = 1_500;
+const WINDOW_PLATFORM_HEALTH_INTERVAL_MS = 250;
+const WINDOW_PLATFORM_STALE_MS = 1_000;
+const WINDOW_PLATFORM_EXPIRE_MS = 5_000;
+const WINDOW_PLATFORM_RESTART_BASE_MS = 250;
+const WINDOW_PLATFORM_RESTART_MAX_MS = 8_000;
+const WINDOW_PLATFORM_MAX_LINE_BYTES = 256 * 1024;
+const MAX_WINDOW_PLATFORMS = 256;
+const QUIT_FLUSH_TIMEOUT_MS = 2_000;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -48,6 +67,23 @@ const catalogWatchers = [];
 let catalogChangeTimer = null;
 let hitTestTimer = null;
 let isQuitting = false;
+let quitRequestPending = false;
+let quitRequestTimer = null;
+let windowPlatformCache = null;
+const windowPlatformWatcher = {
+  child: null,
+  generation: 0,
+  startedAt: 0,
+  lastSnapshotAt: 0,
+  snapshotCount: 0,
+  restartAttempt: 0,
+  restartTimer: null,
+  healthTimer: null,
+  // Opt in only after the renderer restores the user's saved preference.
+  // This keeps startup at zero native scans when the feature is disabled.
+  stopped: true,
+  error: null,
+};
 
 const hitTestState = {
   mode: 'regions',
@@ -82,6 +118,9 @@ function buildRuntimeConfig() {
   const defaultItempackLibrary = packaged
     ? path.join(process.resourcesPath, 'itempack-runtime', 'lib.mjs')
     : path.join(repositoryRoot, 'tools', 'itempack', 'lib.mjs');
+  const defaultWindowPlatformsScript = packaged
+    ? path.join(process.resourcesPath, 'windows-platforms.ps1')
+    : path.join(__dirname, 'windows-platforms.ps1');
 
   // Packaged builds never accept renderer or runtime-library overrides. Those
   // switches are useful for local development, but honoring them in a shipped
@@ -132,6 +171,7 @@ function buildRuntimeConfig() {
         process.env.PET_DESKTOP_ITEMPACK_LIBRARY,
         defaultItempackLibrary,
       )),
+    windowPlatformsScript: path.resolve(defaultWindowPlatformsScript),
     trayIcon: firstValue(
       readArg('--tray-icon'),
       process.env.PET_DESKTOP_TRAY_ICON,
@@ -242,9 +282,287 @@ function getTargetDisplay() {
 }
 
 function applyOverlayBounds() {
+  windowPlatformCache = null;
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
   const display = getTargetDisplay();
   overlayWindow.setBounds(display.workArea, false);
+}
+
+function currentOverlayBounds() {
+  if (overlayWindow && !overlayWindow.isDestroyed()) return overlayWindow.getBounds();
+  return getTargetDisplay().workArea;
+}
+
+function cachedWindowPlatformPayload({ stale = false, error = null, dropPlatforms = false } = {}) {
+  return buildWindowPlatformsPayload({
+    platforms: dropPlatforms ? [] : windowPlatformCache?.platforms ?? [],
+    overlayBounds: currentOverlayBounds(),
+    supported: process.platform === 'win32',
+    capturedAt: windowPlatformCache?.capturedAt ?? Date.now(),
+    stale,
+    error,
+  });
+}
+
+function powershellExecutablePath() {
+  const systemRoot = process.env.SystemRoot || 'C:\\Windows';
+  return path.join(
+    systemRoot,
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe',
+  );
+}
+
+function currentScreenToDipMapper() {
+  return createScreenToDipRectMapper(screen, () => (
+    overlayWindow && !overlayWindow.isDestroyed() ? overlayWindow : null
+  ));
+}
+
+function windowPlatformWatcherIsCurrent(child, generation) {
+  return windowPlatformWatcher.child === child
+    && windowPlatformWatcher.generation === generation;
+}
+
+function scheduleWindowPlatformWatcherRestart() {
+  if (
+    process.platform !== 'win32'
+    || isQuitting
+    || windowPlatformWatcher.stopped
+    || windowPlatformWatcher.restartTimer
+  ) return;
+
+  const delay = exponentialBackoffDelay(
+    windowPlatformWatcher.restartAttempt,
+    WINDOW_PLATFORM_RESTART_BASE_MS,
+    WINDOW_PLATFORM_RESTART_MAX_MS,
+  );
+  windowPlatformWatcher.restartAttempt += 1;
+  windowPlatformWatcher.restartTimer = setTimeout(() => {
+    windowPlatformWatcher.restartTimer = null;
+    startWindowPlatformWatcher();
+  }, delay);
+  windowPlatformWatcher.restartTimer.unref?.();
+}
+
+function terminateWindowPlatformWatcher(errorCode, { restart = true } = {}) {
+  const child = windowPlatformWatcher.child;
+  windowPlatformWatcher.child = null;
+  windowPlatformWatcher.generation += 1;
+  windowPlatformWatcher.startedAt = 0;
+  windowPlatformWatcher.lastSnapshotAt = 0;
+  windowPlatformWatcher.snapshotCount = 0;
+  if (errorCode) windowPlatformWatcher.error = errorCode;
+
+  if (child) {
+    child.stdout?.removeAllListeners();
+    child.stderr?.removeAllListeners();
+    if (!child.killed) {
+      try {
+        child.kill();
+      } catch {
+        // The OS already reclaimed the watcher.
+      }
+    }
+    child.unref?.();
+  }
+
+  if (restart) scheduleWindowPlatformWatcherRestart();
+}
+
+function acceptWindowPlatformLine(line, child, generation) {
+  if (!windowPlatformWatcherIsCurrent(child, generation)) return;
+
+  let records;
+  try {
+    const source = line.toString('utf8').replace(/^\uFEFF/, '').trim();
+    const parsed = source ? JSON.parse(source) : [];
+    if (!Array.isArray(parsed)) throw new TypeError('Expected a JSON array');
+    records = parsed;
+  } catch {
+    terminateWindowPlatformWatcher('WINDOW_PLATFORM_WATCHER_INVALID_JSON');
+    return;
+  }
+
+  const capturedAt = Date.now();
+  windowPlatformCache = {
+    capturedAt,
+    platforms: normalizeWindowPlatformRecords(records, currentScreenToDipMapper())
+      .slice(0, MAX_WINDOW_PLATFORMS),
+  };
+  windowPlatformWatcher.lastSnapshotAt = capturedAt;
+  windowPlatformWatcher.snapshotCount += 1;
+  // A helper that emits one frame and immediately crashes must still back off.
+  // Reset only after roughly 2.4 seconds of continuous healthy snapshots.
+  if (windowPlatformWatcher.snapshotCount >= 20) {
+    windowPlatformWatcher.restartAttempt = 0;
+  }
+  windowPlatformWatcher.error = null;
+}
+
+function ensureWindowPlatformHealthLoop() {
+  if (windowPlatformWatcher.healthTimer) return;
+  windowPlatformWatcher.healthTimer = setInterval(() => {
+    if (windowPlatformWatcher.stopped || isQuitting) return;
+    const child = windowPlatformWatcher.child;
+    if (!child) {
+      if (!windowPlatformWatcher.restartTimer) startWindowPlatformWatcher();
+      return;
+    }
+
+    const now = Date.now();
+    if (
+      windowPlatformWatcher.lastSnapshotAt === 0
+      && now - windowPlatformWatcher.startedAt > WINDOW_PLATFORM_STARTUP_TIMEOUT_MS
+    ) {
+      terminateWindowPlatformWatcher('WINDOW_PLATFORM_WATCHER_START_TIMEOUT');
+      return;
+    }
+    if (
+      windowPlatformWatcher.lastSnapshotAt > 0
+      && now - windowPlatformWatcher.lastSnapshotAt > WINDOW_PLATFORM_STALL_TIMEOUT_MS
+    ) {
+      terminateWindowPlatformWatcher('WINDOW_PLATFORM_WATCHER_STALLED');
+    }
+  }, WINDOW_PLATFORM_HEALTH_INTERVAL_MS);
+  windowPlatformWatcher.healthTimer.unref?.();
+}
+
+function startWindowPlatformWatcher() {
+  if (
+    process.platform !== 'win32'
+    || isQuitting
+    || windowPlatformWatcher.stopped
+    || windowPlatformWatcher.child
+    || windowPlatformWatcher.restartTimer
+  ) return;
+
+  ensureWindowPlatformHealthLoop();
+  if (!fs.existsSync(runtimeConfig.windowPlatformsScript)) {
+    windowPlatformWatcher.error = 'WINDOW_PLATFORM_WATCHER_MISSING';
+    scheduleWindowPlatformWatcherRestart();
+    return;
+  }
+
+  const args = [
+    '-NoLogo',
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    runtimeConfig.windowPlatformsScript,
+    '-OwnProcessId',
+    String(process.pid),
+    '-IntervalMilliseconds',
+    String(WINDOW_PLATFORM_WATCH_INTERVAL_MS),
+    '-MaximumPlatforms',
+    String(MAX_WINDOW_PLATFORMS),
+  ];
+
+  let child;
+  try {
+    child = spawn(powershellExecutablePath(), args, {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch {
+    windowPlatformWatcher.error = 'WINDOW_PLATFORM_WATCHER_SPAWN_FAILED';
+    scheduleWindowPlatformWatcherRestart();
+    return;
+  }
+
+  const generation = windowPlatformWatcher.generation + 1;
+  windowPlatformWatcher.generation = generation;
+  windowPlatformWatcher.child = child;
+  windowPlatformWatcher.startedAt = Date.now();
+  windowPlatformWatcher.lastSnapshotAt = 0;
+  windowPlatformWatcher.snapshotCount = 0;
+
+  const decoder = createBoundedLineDecoder({
+    maxBytes: WINDOW_PLATFORM_MAX_LINE_BYTES,
+    onLine: (line) => acceptWindowPlatformLine(line, child, generation),
+    onViolation: (code) => {
+      if (windowPlatformWatcherIsCurrent(child, generation)) {
+        terminateWindowPlatformWatcher(code);
+      }
+    },
+  });
+
+  child.stdout.on('data', (chunk) => decoder.push(chunk));
+  child.stdout.on('end', () => decoder.end());
+  // Drain stderr so a faulty helper cannot deadlock. Its contents are never
+  // logged or sent to the renderer because they could contain environment data.
+  child.stderr.on('data', () => {});
+  child.once('error', () => {
+    if (windowPlatformWatcherIsCurrent(child, generation)) {
+      terminateWindowPlatformWatcher('WINDOW_PLATFORM_WATCHER_SPAWN_FAILED');
+    }
+  });
+  child.once('exit', (code) => {
+    if (!windowPlatformWatcherIsCurrent(child, generation)) return;
+    windowPlatformWatcher.child = null;
+    windowPlatformWatcher.startedAt = 0;
+    windowPlatformWatcher.lastSnapshotAt = 0;
+    windowPlatformWatcher.snapshotCount = 0;
+    windowPlatformWatcher.error = code === 0
+      ? 'WINDOW_PLATFORM_WATCHER_EXITED'
+      : 'WINDOW_PLATFORM_WATCHER_FAILED';
+    scheduleWindowPlatformWatcherRestart();
+  });
+}
+
+function stopWindowPlatformWatcher() {
+  windowPlatformWatcher.stopped = true;
+  clearTimeout(windowPlatformWatcher.restartTimer);
+  clearInterval(windowPlatformWatcher.healthTimer);
+  windowPlatformWatcher.restartTimer = null;
+  windowPlatformWatcher.healthTimer = null;
+  windowPlatformWatcher.restartAttempt = 0;
+  terminateWindowPlatformWatcher(null, { restart: false });
+  windowPlatformCache = null;
+  windowPlatformWatcher.error = null;
+}
+
+function setWindowPlatformWatcherEnabled(enabled) {
+  const nextEnabled = Boolean(enabled) && process.platform === 'win32' && !isQuitting;
+  if (!nextEnabled) {
+    stopWindowPlatformWatcher();
+    return false;
+  }
+
+  windowPlatformWatcher.stopped = false;
+  windowPlatformWatcher.error = null;
+  startWindowPlatformWatcher();
+  return true;
+}
+
+function getWindowPlatforms() {
+  if (process.platform !== 'win32') {
+    return buildWindowPlatformsPayload({
+      supported: false,
+      platforms: [],
+      overlayBounds: currentOverlayBounds(),
+    });
+  }
+
+  if (windowPlatformWatcher.stopped) {
+    return cachedWindowPlatformPayload({ dropPlatforms: true });
+  }
+
+  startWindowPlatformWatcher();
+  const cacheAge = windowPlatformCache
+    ? Date.now() - windowPlatformCache.capturedAt
+    : Number.POSITIVE_INFINITY;
+  const stale = cacheAge > WINDOW_PLATFORM_STALE_MS;
+  const expired = cacheAge > WINDOW_PLATFORM_EXPIRE_MS;
+  return cachedWindowPlatformPayload({
+    stale,
+    error: windowPlatformWatcher.error,
+    dropPlatforms: expired,
+  });
 }
 
 function createOverlayWindow() {
@@ -337,7 +655,7 @@ function openControlPanel() {
   // Alpha keeps a single renderer instance so a second preview window cannot
   // race the overlay and overwrite pet positions with a different viewport.
   // The overlay already owns the complete interaction bar and import dialog.
-  setOverlayVisible(true);
+  setInteractionBarVisible(true);
 }
 
 function broadcast(channel, payload) {
@@ -349,8 +667,8 @@ function broadcast(channel, payload) {
 }
 
 function shellStatePayload() {
-  const { visible, quiet, displayId } = store.getShellState();
-  return { visible, quiet, displayId };
+  const { visible, interactionBarVisible, quiet, displayId } = store.getShellState();
+  return { visible, interactionBarVisible, quiet, displayId };
 }
 
 function notifyShellState() {
@@ -377,9 +695,58 @@ function setOverlayVisible(visible) {
   return notifyShellState();
 }
 
+function setInteractionBarVisible(visible) {
+  const next = Boolean(visible);
+  const current = store.getShellState();
+  store.patchShellState({
+    interactionBarVisible: next,
+    visible: next ? true : current.visible,
+  });
+
+  if (next && overlayWindow && !overlayWindow.isDestroyed()) {
+    applyOverlayBounds();
+    overlayWindow.showInactive();
+    overlayWindow.setFocusable(false);
+  }
+
+  return notifyShellState();
+}
+
 function setQuietMode(quiet) {
   store.patchShellState({ quiet: Boolean(quiet) });
   return notifyShellState();
+}
+
+function finishAppQuit() {
+  if (isQuitting) return;
+  clearTimeout(quitRequestTimer);
+  quitRequestTimer = null;
+  quitRequestPending = false;
+  isQuitting = true;
+  app.quit();
+}
+
+function requestAppQuit(reason = 'tray') {
+  if (isQuitting || quitRequestPending) return;
+  const renderer = overlayWindow && !overlayWindow.isDestroyed()
+    ? overlayWindow.webContents
+    : null;
+  if (!renderer || renderer.isDestroyed()) {
+    finishAppQuit();
+    return;
+  }
+
+  quitRequestPending = true;
+  try {
+    renderer.send(IPC.QUIT_REQUESTED, { reason });
+  } catch {
+    finishAppQuit();
+    return;
+  }
+  quitRequestTimer = setTimeout(() => {
+    finishAppQuit();
+  }, QUIT_FLUSH_TIMEOUT_MS);
+  quitRequestTimer.unref?.();
 }
 
 function trayIconImage() {
@@ -414,16 +781,13 @@ function rebuildTrayMenu() {
     },
     { type: 'separator' },
     {
-      label: '显示互动条',
-      click: openControlPanel,
+      label: state.interactionBarVisible ? '隐藏互动条' : '显示互动条',
+      click: () => setInteractionBarVisible(!state.interactionBarVisible),
     },
     { type: 'separator' },
     {
       label: '退出',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
+      click: () => requestAppQuit('tray'),
     },
   ]);
   tray.setContextMenu(menu);
@@ -978,6 +1342,14 @@ function registerIpc() {
       forward: hitTestState.manualForward,
     };
   });
+  ipcMain.handle(IPC.GET_WINDOW_PLATFORMS, (event) => {
+    assertTrustedSender(event);
+    return getWindowPlatforms();
+  });
+  ipcMain.handle(IPC.SET_WINDOW_PLATFORM_INTERACTIONS, (event, enabled) => {
+    assertTrustedSender(event);
+    return setWindowPlatformWatcherEnabled(enabled);
+  });
   ipcMain.handle(IPC.GET_SHELL_STATE, (event) => {
     assertTrustedSender(event);
     return shellStatePayload();
@@ -986,13 +1358,13 @@ function registerIpc() {
     assertTrustedSender(event);
     const input = patch && typeof patch === 'object' ? patch : {};
     if (typeof input.quiet === 'boolean') setQuietMode(input.quiet);
+    if (typeof input.interactionBarVisible === 'boolean') return setInteractionBarVisible(input.interactionBarVisible);
     if (typeof input.visible === 'boolean') return setOverlayVisible(input.visible);
     return shellStatePayload();
   });
   ipcMain.handle(IPC.QUIT_APP, (event) => {
     assertTrustedSender(event);
-    isQuitting = true;
-    app.quit();
+    finishAppQuit();
     return true;
   });
 }
@@ -1043,7 +1415,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  clearTimeout(quitRequestTimer);
+  quitRequestTimer = null;
   isQuitting = true;
+  stopWindowPlatformWatcher();
   clearInterval(hitTestTimer);
   clearTimeout(catalogChangeTimer);
   for (const watcher of catalogWatchers) watcher.close();

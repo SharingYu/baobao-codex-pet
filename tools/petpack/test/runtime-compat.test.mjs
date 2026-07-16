@@ -14,29 +14,26 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-test('Alpha accepts the checked-in Codex v2 layout', async () => {
+test('runtime accepts the checked-in Codex v2 layout', async () => {
   assert.equal(assertAlphaRendererCompatibility(await loadManifest()), true);
 });
 
-test('Alpha rejects a valid but unsupported atlas grid', async () => {
+test('runtime accepts a larger declarative atlas grid', async () => {
   const manifest = clone(await loadManifest());
-  manifest.renderer.cellWidth = 256;
-  assert.throws(
-    () => assertAlphaRendererCompatibility(manifest),
-    (error) => error?.code === 'UNSUPPORTED_RENDERER',
-  );
+  manifest.renderer.rows = 15;
+  assert.equal(assertAlphaRendererCompatibility(manifest), true);
 });
 
-test('Alpha rejects animation or look layouts it cannot render', async () => {
+test('runtime rejects animation or look cells outside the declared grid', async () => {
   const animationManifest = clone(await loadManifest());
-  animationManifest.renderer.animations.idle.row = 3;
+  animationManifest.renderer.animations.idle.row = 99;
   assert.throws(
     () => assertAlphaRendererCompatibility(animationManifest),
     (error) => error?.code === 'UNSUPPORTED_RENDERER',
   );
 
   const lookManifest = clone(await loadManifest());
-  lookManifest.renderer.lookDirections[0].column = 7;
+  lookManifest.renderer.lookDirections[0].column = 99;
   assert.throws(
     () => assertAlphaRendererCompatibility(lookManifest),
     (error) => error?.code === 'UNSUPPORTED_RENDERER',

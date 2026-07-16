@@ -8,6 +8,7 @@ const packageJson = JSON.parse(await readFile(path.join(repositoryRoot, 'package
 const version = `v${packageJson.version}`;
 const assets = [
   `PetDesktop-${packageJson.version}-x64.exe`,
+  `PetDesktop-Portable-${packageJson.version}-x64.exe`,
   'petpacks/baobao.petpack',
   'petpacks/feifei.petpack',
   'itempacks/starter-play-kit.itempack',
