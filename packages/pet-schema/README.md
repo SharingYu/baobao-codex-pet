@@ -15,6 +15,10 @@ JSON Schema covers the portable shape. The companion validator in
 `tools/petpack` additionally checks cross-field references, atlas geometry,
 actual image dimensions, hashes, file counts, and archive safety.
 
+The v1 wire identifier remains `com.baofeifei.petpack` for compatibility with
+already delivered BaoBao and FeiFei packs. It is a format identifier, not a
+signal that the neutral runtime bundles either character.
+
 ## Bundle limits
 
 | Limit | v1 value |

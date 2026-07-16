@@ -1,4 +1,5 @@
-const STORAGE_KEY = "baobao-feifei-desktop-state-v1";
+const STORAGE_KEY = "pet-desktop-companion-state-v2";
+const LEGACY_STORAGE_KEYS = ["baobao-feifei-desktop-state-v1"];
 
 function getNativeBridge() {
   return typeof window !== "undefined" ? window.petDesktop : undefined;
@@ -30,8 +31,14 @@ async function invokeRequired(methodNames, ...args) {
 
 function readFallbackState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    for (const key of [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const state = JSON.parse(raw);
+      if (key !== STORAGE_KEY) localStorage.setItem(STORAGE_KEY, raw);
+      return state;
+    }
+    return null;
   } catch (error) {
     console.warn("Unable to read local pet state", error);
     return null;
@@ -41,6 +48,7 @@ function readFallbackState() {
 function writeFallbackState(state) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key);
     return true;
   } catch (error) {
     console.warn("Unable to save local pet state", error);
@@ -86,6 +94,10 @@ export const petBridge = {
     return invokeFirst(["setShellState"], patch);
   },
 
+  async quitApp() {
+    return invokeRequired(["quitApp", "exitApp"]);
+  },
+
   async importPetpack() {
     return invokeRequired(["importPetpack", "installPetpack", "addPetpack"]);
   },
@@ -94,9 +106,22 @@ export const petBridge = {
     return invokeRequired(["removePetpack", "uninstallPetpack"], id);
   },
 
+  async importItempack() {
+    return invokeRequired(["importItempack", "installItempack", "addItempack"]);
+  },
+
+  async removeItempack(id) {
+    return invokeRequired(["removeItempack", "uninstallItempack"], id);
+  },
+
   get canImportPetpack() {
     const native = getNativeBridge();
     return Boolean(native && ["importPetpack", "installPetpack", "addPetpack"].some((name) => typeof native[name] === "function"));
+  },
+
+  get canImportItempack() {
+    const native = getNativeBridge();
+    return Boolean(native && ["importItempack", "installItempack", "addItempack"].some((name) => typeof native[name] === "function"));
   },
 
   async resolveAssetUrl(pathOrUrl) {

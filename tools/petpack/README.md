@@ -12,7 +12,7 @@ node tools/petpack/cli.mjs validate dist/baobao.petpack
 node tools/petpack/cli.mjs pack petpacks/baobao dist/baobao.petpack
 
 # Validate first, then import atomically into a new directory
-node tools/petpack/cli.mjs import dist/baobao.petpack "$env:LOCALAPPDATA\BaoFeifei\pets\baobao"
+node tools/petpack/cli.mjs import dist/baobao.petpack .tmp/installed-pets/baobao
 
 # Convert an existing validated Codex v2 atlas
 node tools/petpack/convert-codex.mjs --input pets/baobao --output petpacks/baobao

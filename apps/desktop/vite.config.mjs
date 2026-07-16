@@ -11,7 +11,7 @@ export default defineConfig({
   build: {
     outDir: fileURLToPath(new URL("./dist", import.meta.url)),
     emptyOutDir: true,
-    sourcemap: true,
+    sourcemap: false,
     target: "chrome136"
   }
 });

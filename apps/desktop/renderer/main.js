@@ -7,28 +7,11 @@ import {
   lookCellForVector
 } from "./sprite.js";
 
-const DEFAULT_PETS = [
-  {
-    id: "baobao",
-    name: "包包",
-    displayName: "包包 Baobao",
-    color: "#d6a05f",
-    fallbackUrl: new URL("../../../pets/baobao/spritesheet.webp", import.meta.url).href
-  },
-  {
-    id: "feifei",
-    name: "菲菲",
-    displayName: "菲菲 Feifei",
-    color: "#9b9496",
-    fallbackUrl: new URL("../../../pets/feifei/spritesheet.webp", import.meta.url).href
-  }
-];
-
 const GUIDE_STEPS = [
   {
     kicker: "第一次见面",
-    title: "先和它们打个招呼",
-    copy: "点击猫咪就是摸摸；按住拖动，可以把它们搬到喜欢的位置。",
+    title: "先和新朋友打个招呼",
+    copy: "点击宠物就是摸摸；按住拖动，可以把它搬到喜欢的位置。",
     action: "pet"
   },
   {
@@ -46,16 +29,10 @@ const GUIDE_STEPS = [
   {
     kicker: "需要专注时",
     title: "一键安静陪伴",
-    copy: "开启“安静”，包包和菲菲会停下主动玩耍，安稳待在桌面边缘。",
+    copy: "开启“安静”，宠物会停下主动玩耍，安稳待在桌面边缘。",
     action: "quiet"
   }
 ];
-
-const FOOD_NAMES = {
-  fish: "小鱼干",
-  cube: "冻干",
-  can: "罐罐"
-};
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const randomBetween = (min, max) => min + Math.random() * (max - min);
@@ -72,11 +49,15 @@ function joinAssetUrl(base, relative) {
   }
 }
 
-function catalogEntries(rawCatalog) {
+function catalogPets(rawCatalog) {
   if (Array.isArray(rawCatalog)) return rawCatalog;
   if (Array.isArray(rawCatalog?.pets)) return rawCatalog.pets;
   if (Array.isArray(rawCatalog?.entries)) return rawCatalog.entries;
   return [];
+}
+
+function catalogItempacks(rawCatalog) {
+  return Array.isArray(rawCatalog?.items) ? rawCatalog.items : [];
 }
 
 function normalizeCatalogEntry(entry) {
@@ -107,13 +88,27 @@ function normalizeCatalogEntry(entry) {
   };
 }
 
-function createImageCandidates(entry, fallback) {
-  const candidates = [];
-  if (entry?.url) candidates.push(entry.url);
-  if (fallback?.fallbackUrl && !candidates.includes(fallback.fallbackUrl)) {
-    candidates.push(fallback.fallbackUrl);
-  }
-  return candidates;
+function normalizeItemCatalogEntry(entry) {
+  const manifest = entry?.manifest ?? entry ?? {};
+  const assets = new Map(
+    Array.isArray(manifest.assets)
+      ? manifest.assets.map((asset) => [String(asset.id).toLowerCase(), asset])
+      : []
+  );
+  return (Array.isArray(manifest.items) ? manifest.items : []).flatMap((item) => {
+    const asset = assets.get(String(item?.asset ?? "").toLowerCase());
+    if (!item?.id || !asset?.path) return [];
+    return [{
+      id: `${manifest.id}:${item.id}`,
+      packId: String(manifest.id ?? entry?.id ?? ""),
+      name: String(item.displayName ?? item.id),
+      category: item.category,
+      behavior: item.behavior,
+      scale: Number(item.scale) || 1,
+      url: entry?.assetBaseUrl ? joinAssetUrl(entry.assetBaseUrl, asset.path) : asset.path,
+      manifest
+    }];
+  });
 }
 
 async function loadFirstImage(candidates) {
@@ -155,6 +150,7 @@ class PetActor {
     this.hovered = false;
     this.insideBox = false;
     this.insideBoxUntil = 0;
+    this.sceneMotion = null;
     this.nextDecisionAt = now() + randomBetween(3200, 6200) + index * 850;
   }
 
@@ -200,12 +196,14 @@ class PetActor {
   }
 
   walkTo(x, y, reason = "wander", options = {}) {
+    this.sceneMotion = null;
     this.insideBox = false;
     this.target = {
       x,
       y,
       reason,
       entityId: options.entityId,
+      destination: options.destination,
       manual: Boolean(options.manual),
       radius: options.radius ?? 42
     };
@@ -215,6 +213,7 @@ class PetActor {
 
   pet(timestamp = now()) {
     this.target = null;
+    this.sceneMotion = null;
     this.lookTarget = null;
     this.setState("happy", 1700, timestamp);
     this.nextDecisionAt = timestamp + randomBetween(3800, 6500);
@@ -227,8 +226,47 @@ class PetActor {
     this.setState("look", duration, timestamp);
   }
 
+  beginSceneJump(destination, timestamp = now()) {
+    this.target = null;
+    this.insideBox = false;
+    this.sceneMotion = {
+      startedAt: timestamp,
+      duration: randomBetween(780, 1180),
+      startX: this.x,
+      startY: this.y,
+      endX: clamp(
+        destination.x - this.width * 0.5,
+        -this.width * 0.16,
+        this.world.width - this.width * 0.84
+      ),
+      endY: clamp(
+        destination.y - this.height * 0.58,
+        4,
+        this.world.height - this.height - 7
+      ),
+      arcHeight: randomBetween(64, 118)
+    };
+    this.setState("pounce", 0, timestamp);
+  }
+
   update(deltaSeconds, timestamp) {
     if (this.dragging) return;
+
+    if (this.sceneMotion) {
+      const motion = this.sceneMotion;
+      const progress = clamp((timestamp - motion.startedAt) / motion.duration, 0, 1);
+      this.x = motion.startX + (motion.endX - motion.startX) * progress;
+      this.y = motion.startY + (motion.endY - motion.startY) * progress - Math.sin(Math.PI * progress) * motion.arcHeight;
+      this.facing = motion.endX >= motion.startX ? "right" : "left";
+      this.setState("pounce");
+      if (progress >= 1) {
+        this.sceneMotion = null;
+        this.setState("idle", 0, timestamp);
+        this.nextDecisionAt = timestamp + randomBetween(4200, 8200);
+        this.world.callbacks.requestSave();
+      }
+      return;
+    }
 
     if (this.insideBox && timestamp > this.insideBoxUntil && !this.world.quiet) {
       this.insideBox = false;
@@ -258,7 +296,13 @@ class PetActor {
         const length = Math.max(0.001, Math.hypot(dx, dy));
 
         if (length > this.target.radius) {
-          const speed = this.target.reason === "ball" || this.target.reason === "wand" ? 148 : 88;
+          const speed = this.target.reason === "ball" || this.target.reason === "wand"
+            ? 148
+            : this.target.reason === "edge-run"
+              ? 132
+              : this.target.reason === "edge-approach"
+                ? 104
+                : 88;
           this.x += (dx / length) * speed * deltaSeconds;
           this.y += (dy / length) * speed * deltaSeconds * 0.62;
           this.facing = dx >= 0 ? "right" : "left";
@@ -409,15 +453,20 @@ class PetWorld {
     this.height = 1;
     this.dpr = 1;
     this.pets = [];
+    this.itemDefinitions = [];
+    this.catalog = { pets: [], items: [] };
+    this.catalogLoadToken = 0;
     this.foods = [];
     this.balls = [];
     this.box = null;
-    this.wand = { active: false, x: 0, y: 0, lastRetargetAt: 0 };
+    this.wand = { active: false, x: 0, y: 0, lastRetargetAt: 0, startedAt: 0, item: null };
     this.particles = [];
     this.pointer = { x: 0, y: 0, seen: false };
     this.pointerSession = null;
     this.foodDrag = null;
     this.quiet = false;
+    this.edgeScenesEnabled = true;
+    this.nextEdgeSceneAt = now() + randomBetween(9000, 15000);
     this.activePetId = null;
     this.reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.lastFrameAt = now();
@@ -428,30 +477,26 @@ class PetWorld {
   }
 
   async load(rawCatalog, savedState) {
+    const loadToken = ++this.catalogLoadToken;
     const shouldStartLoop = !this.running;
-    const nativeEntries = catalogEntries(rawCatalog).map(normalizeCatalogEntry).filter((entry) => entry.id);
-    const nativeById = new Map(nativeEntries.map((entry) => [entry.id.toLowerCase(), entry]));
-    const defaultIds = new Set(DEFAULT_PETS.map((pet) => pet.id));
-    const selectedDefaults = DEFAULT_PETS.map((fallback) => ({
-      ...fallback,
-      ...(nativeById.get(fallback.id) ?? {}),
-      name: fallback.name,
-      displayName: nativeById.get(fallback.id)?.displayName ?? fallback.displayName
-    }));
+    this.catalog = rawCatalog && typeof rawCatalog === "object"
+      ? rawCatalog
+      : { pets: [], items: [] };
+    const nativeEntries = catalogPets(rawCatalog)
+      .map(normalizeCatalogEntry)
+      .filter((entry) => entry.id && entry.url);
     const extraColors = ["#8fa99a", "#c68d72", "#9b91b5", "#d2ad65", "#779ba8"];
-    const selectedExtras = nativeEntries
-      .filter((entry) => !defaultIds.has(entry.id.toLowerCase()))
+    const selectedPets = nativeEntries
       .map((entry, index) => ({
         ...entry,
         name: String(entry.name || entry.displayName || entry.id).split(/[\s/]/)[0],
         color: extraColors[index % extraColors.length]
       }));
-    const selected = [...selectedDefaults, ...selectedExtras];
 
-    const definitions = await Promise.all(selected.map(async (definition) => {
+    const definitions = await Promise.all(selectedPets.map(async (definition) => {
       let image = null;
       try {
-        image = await loadFirstImage(createImageCandidates(definition, definition));
+        image = await loadFirstImage(definition.url ? [definition.url] : []);
       } catch (error) {
         console.error(error);
         this.callbacks.toast(`${definition.name}的动画暂时没加载出来`);
@@ -459,7 +504,30 @@ class PetWorld {
       return { ...definition, image };
     }));
 
+    const rawItems = catalogItempacks(rawCatalog)
+      .flatMap(normalizeItemCatalogEntry)
+      .filter((item) => item.id && item.url);
+    const itemDefinitions = [];
+    for (const definition of rawItems) {
+      try {
+        itemDefinitions.push({ ...definition, image: await loadFirstImage([definition.url]) });
+      } catch (error) {
+        console.error(error);
+        this.callbacks.toast(`${definition.name}道具素材暂时没加载出来`);
+        itemDefinitions.push({ ...definition, image: null });
+      }
+    }
+
+    if (loadToken !== this.catalogLoadToken) return false;
+
     const rendererState = savedState?.rendererState ?? savedState?.petState ?? savedState ?? {};
+    this.foods = [];
+    this.balls = [];
+    this.box = null;
+    this.foodDrag = null;
+    this.wand = { active: false, x: 0, y: 0, lastRetargetAt: 0, startedAt: 0, item: null };
+    this.callbacks.wandChanged(false);
+    this.itemDefinitions = itemDefinitions;
     this.quiet = Boolean(rendererState.quiet);
     this.activePetId = rendererState.activePetId ?? null;
     this.pets = definitions.map((definition, index) => new PetActor(
@@ -468,25 +536,21 @@ class PetWorld {
       rendererState.pets?.[definition.id],
       index
     ));
-    if (!this.activePetId) this.activePetId = this.pets[0]?.id ?? null;
+    if (!this.pets.some((pet) => pet.id === this.activePetId)) {
+      this.activePetId = this.pets[0]?.id ?? null;
+    }
     this.callbacks.quietChanged(this.quiet, false);
     if (shouldStartLoop) {
       this.running = true;
       this.lastFrameAt = now();
       requestAnimationFrame((timestamp) => this.frame(timestamp));
     }
+    return true;
   }
 
   async reloadCatalog(rawCatalog) {
     const currentState = this.serialize();
-    const previousPets = this.pets;
-    try {
-      await this.load(rawCatalog, currentState);
-      if (!this.pets.length) this.pets = previousPets;
-    } catch (error) {
-      this.pets = previousPets;
-      throw error;
-    }
+    await this.load(rawCatalog, currentState);
   }
 
   resize() {
@@ -540,6 +604,9 @@ class PetWorld {
     this.updateBalls(deltaSeconds, timestamp);
     this.updateWand(timestamp);
     for (const pet of this.pets) pet.update(deltaSeconds, timestamp);
+    if (!this.quiet && this.edgeScenesEnabled && timestamp >= this.nextEdgeSceneAt) {
+      this.startEdgeScene(timestamp);
+    }
     this.updateParticles(deltaSeconds);
   }
 
@@ -579,7 +646,13 @@ class PetWorld {
   }
 
   updateWand(timestamp) {
-    if (!this.wand.active || this.quiet || timestamp - this.wand.lastRetargetAt < 160) return;
+    if (!this.wand.active || this.quiet) return;
+    if (timestamp - this.wand.startedAt > 30000) {
+      this.toggleWand(false);
+      this.callbacks.toast("逗猫棒先收起来了，需要时可以再拿出来");
+      return;
+    }
+    if (timestamp - this.wand.lastRetargetAt < 160) return;
     const pet = this.nearestPet(this.wand.x, this.wand.y, (candidate) => !candidate.dragging);
     if (pet && !pet.insideBox) {
       pet.walkTo(this.wand.x, this.wand.y, "wand", { manual: true, radius: 52 });
@@ -639,7 +712,7 @@ class PetWorld {
         pet.setState("happy", 1550);
         this.spawnCrumbs(food.x, food.y, pet.color);
       }, 400);
-      this.callbacks.toast(`${pet.name}收下了${FOOD_NAMES[food.type] ?? "零食"}`);
+      this.callbacks.toast(`${pet.name}收下了${food.item?.name ?? "零食"}`);
       this.callbacks.action("feed");
       this.callbacks.requestSave();
       return;
@@ -677,6 +750,32 @@ class PetWorld {
       return;
     }
 
+    if (target.reason === "edge-approach" && target.destination) {
+      pet.walkTo(
+        target.destination.x,
+        target.destination.y,
+        "edge-run",
+        { radius: 18 }
+      );
+      return;
+    }
+
+    if (target.reason === "edge-run") {
+      const landingY = clamp(
+        target.y + randomBetween(-8, 8),
+        pet.height * 0.58 + 4,
+        this.height - pet.height * 0.42 - 7
+      );
+      const landingX = clamp(
+        target.x + (target.x < this.width / 2 ? 98 : -98),
+        pet.width * 0.45,
+        this.width - pet.width * 0.45,
+      );
+      pet.beginSceneJump({ x: landingX, y: landingY }, timestamp);
+      this.callbacks.toast(`${pet.name}从屏幕边缘轻轻跳下来了`);
+      return;
+    }
+
     pet.setState("idle", 0, timestamp);
   }
 
@@ -691,6 +790,7 @@ class PetWorld {
 
     if (pet) {
       this.activePetId = pet.id;
+      pet.sceneMotion = null;
       this.pointerSession = {
         kind: "pet",
         pointerId: event.pointerId,
@@ -823,8 +923,8 @@ class PetWorld {
     this.callbacks.requestSave();
   }
 
-  startFoodDrag(type, x, y) {
-    this.foodDrag = { id: "food-drag", type, x, y, radius: 18 };
+  startFoodDrag(item, x, y) {
+    this.foodDrag = { id: "food-drag", item, x, y, radius: 18 * item.scale };
   }
 
   moveFoodDrag(x, y) {
@@ -840,16 +940,16 @@ class PetWorld {
     const suggestedY = activePet ? activePet.y + activePet.height * 0.72 : this.height * 0.72;
     const food = {
       id: `food-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      type: this.foodDrag.type,
+      item: this.foodDrag.item,
       x: clamp(wasDragged ? x : suggestedX, 24, this.width - 24),
       y: clamp(wasDragged ? y : suggestedY, 24, this.height - 28),
-      radius: 18,
+      radius: 18 * this.foodDrag.item.scale,
       createdAt: now()
     };
     this.foodDrag = null;
     this.foods.push(food);
     this.assignFood(food);
-    this.callbacks.toast(`放下了${FOOD_NAMES[food.type]}`);
+    this.callbacks.toast(`放下了${food.item.name}`);
   }
 
   assignFood(food) {
@@ -860,7 +960,7 @@ class PetWorld {
     this.callbacks.action("feed");
   }
 
-  spawnBall() {
+  spawnBall(item) {
     this.setQuiet(false);
     const activePet = this.getActivePet();
     const x = activePet ? clamp(activePet.center.x + 130, 40, this.width - 40) : this.width / 2;
@@ -868,7 +968,8 @@ class PetWorld {
       id: `ball-${Date.now()}`,
       x,
       y: Math.max(40, this.height * 0.38),
-      radius: 16,
+      radius: 18 * item.scale,
+      item,
       vx: randomBetween(-80, 120),
       vy: -220,
       createdAt: now(),
@@ -876,21 +977,23 @@ class PetWorld {
       dragging: false
     };
     this.balls.push(ball);
-    this.callbacks.toast("小球滚出来了");
+    this.callbacks.toast(`${item.name}滚出来了`);
     this.callbacks.action("toy");
   }
 
-  toggleWand(force) {
+  toggleWand(force, item = this.wand.item) {
     const next = force ?? !this.wand.active;
     if (next) this.setQuiet(false);
     this.wand.active = next;
+    this.wand.item = next ? item : null;
+    this.wand.startedAt = next ? now() : 0;
     this.wand.x = this.pointer.seen ? this.pointer.x : this.width * 0.58;
     this.wand.y = this.pointer.seen ? this.pointer.y : this.height * 0.48;
     this.canvas.dataset.cursor = next ? "play" : "default";
     this.callbacks.wandChanged(next);
     this.callbacks.regionsChanged(true);
     if (next) {
-      this.callbacks.toast("移动指针，逗猫棒会跟着你");
+      this.callbacks.toast(`移动指针，${item?.name ?? "逗猫棒"}会跟着你`);
       this.callbacks.action("toy");
     } else {
       for (const pet of this.pets) {
@@ -899,21 +1002,22 @@ class PetWorld {
     }
   }
 
-  spawnBox() {
+  spawnBox(item) {
     this.setQuiet(false);
-    const width = 136;
-    const height = 88;
+    const width = Math.round(136 * item.scale);
+    const height = Math.round(88 * item.scale);
     const activePet = this.getActivePet();
     this.box = {
       x: clamp((activePet?.center.x ?? this.width * 0.6) + 115, 18, this.width - width - 18),
       y: clamp((activePet?.y ?? this.height * 0.68) + 70, this.height * 0.45, this.height - height - 12),
       width,
       height,
+      item,
       occupantId: null
     };
     const pet = this.nearestPet(this.box.x + width / 2, this.box.y, (candidate) => !candidate.dragging);
     pet?.walkTo(this.box.x + width / 2, this.box.y + 24, "box", { manual: true, radius: 44 });
-    this.callbacks.toast("纸箱已经摆好，猫会自己决定要不要进去");
+    this.callbacks.toast(`${item.name}已经摆好，宠物会自己决定要不要进去`);
     this.callbacks.action("toy");
   }
 
@@ -924,6 +1028,7 @@ class PetWorld {
     if (next) {
       this.toggleWand(false);
       for (const pet of this.pets) {
+        pet.sceneMotion = null;
         if (pet.target && !pet.target.manual) pet.target = null;
         if (!pet.dragging && !pet.target) pet.setState("idle");
       }
@@ -944,20 +1049,55 @@ class PetWorld {
       .sort((a, b) => a.value - b.value)[0]?.pet ?? null;
   }
 
+  itemsFor(category) {
+    return this.itemDefinitions.filter((item) => item.category === category && item.image);
+  }
+
+  startEdgeScene(timestamp = now()) {
+    if (this.reducedMotion) return;
+    const eligible = this.pets.filter((pet) => !pet.dragging && !pet.target && !pet.sceneMotion && !pet.insideBox);
+    this.nextEdgeSceneAt = timestamp + randomBetween(16000, 30000);
+    if (!eligible.length) return;
+    const pet = eligible[Math.floor(Math.random() * eligible.length)];
+    const railY = this.height - pet.height * 0.42 - 10;
+    const runToLeft = pet.center.x > this.width / 2;
+    const targetX = runToLeft ? pet.width * 0.52 : this.width - pet.width * 0.52;
+    const entryX = clamp(
+      pet.center.x,
+      pet.width * 0.52,
+      this.width - pet.width * 0.52
+    );
+    pet.walkTo(entryX, railY, "edge-approach", {
+      radius: 18,
+      destination: { x: targetX, y: railY }
+    });
+  }
+
+  triggerEdgeScene() {
+    this.nextEdgeSceneAt = now() + randomBetween(16000, 30000);
+    this.startEdgeScene(now());
+  }
+
   hitPet(x, y) {
     return [...this.pets].reverse().find((pet) => pet.containsPoint(x, y)) ?? null;
   }
 
   hitBall(x, y) {
-    return [...this.balls].reverse().find((ball) => Math.hypot(ball.x - x, ball.y - y) <= ball.radius + 8) ?? null;
+    return [...this.balls].reverse().find(
+      (ball) => Math.hypot(ball.x - x, ball.y - y) <= Math.max(26, ball.radius * 1.1)
+    ) ?? null;
   }
 
   hitFood(x, y) {
-    return [...this.foods].reverse().find((food) => Math.hypot(food.x - x, food.y - y) <= food.radius + 8) ?? null;
+    return [...this.foods].reverse().find(
+      (food) => Math.hypot(food.x - x, food.y - y) <= Math.max(26, food.radius * 1.25)
+    ) ?? null;
   }
 
   hitInteractive(x, y) {
-    return Boolean(this.hitPet(x, y) || this.hitBall(x, y) || this.hitFood(x, y) || this.hitBox(x, y) || this.wand.active);
+    const wandRadius = Math.max(32, 44 * (this.wand.item?.scale ?? 1));
+    const hitsWand = this.wand.active && Math.hypot(this.wand.x - x, this.wand.y - y) <= wandRadius;
+    return Boolean(this.hitPet(x, y) || this.hitBall(x, y) || this.hitFood(x, y) || this.hitBox(x, y) || hitsWand);
   }
 
   hitBox(x, y) {
@@ -982,27 +1122,40 @@ class PetWorld {
       regions.push({ id: `pet:${pet.id}`, kind: "pet", ...roundedRegion(bounds, 8) });
     }
     for (const food of this.foods) {
+      const radius = Math.max(26, food.radius * 1.25);
       regions.push({
         id: food.id,
         kind: "food",
-        x: Math.round(food.x - 26),
-        y: Math.round(food.y - 26),
-        width: 52,
-        height: 52
+        x: Math.round(food.x - radius),
+        y: Math.round(food.y - radius),
+        width: Math.round(radius * 2),
+        height: Math.round(radius * 2)
       });
     }
     for (const ball of this.balls) {
+      const radius = Math.max(26, ball.radius * 1.1);
       regions.push({
         id: ball.id,
         kind: "toy",
-        x: Math.round(ball.x - 26),
-        y: Math.round(ball.y - 26),
-        width: 52,
-        height: 52
+        x: Math.round(ball.x - radius),
+        y: Math.round(ball.y - radius),
+        width: Math.round(radius * 2),
+        height: Math.round(radius * 2)
       });
     }
     if (this.box) regions.push({ id: "toy:box", kind: "toy", ...roundedRegion(this.box, 4) });
-    if (this.wand.active || this.foodDrag || this.pointerSession) {
+    if (this.wand.active) {
+      const radius = Math.max(32, 44 * (this.wand.item?.scale ?? 1));
+      regions.push({
+        id: "toy:wand",
+        kind: "toy",
+        x: Math.round(this.wand.x - radius),
+        y: Math.round(this.wand.y - radius),
+        width: Math.round(radius * 2),
+        height: Math.round(radius * 2)
+      });
+    }
+    if (this.foodDrag || this.pointerSession) {
       regions.push({ id: "stage:active", kind: "stage", x: 0, y: 0, width: Math.round(this.width), height: Math.round(this.height) });
     }
     return regions;
@@ -1073,124 +1226,38 @@ class PetWorld {
   }
 
   drawFood(context, food, alpha = 1) {
-    context.save();
-    context.globalAlpha = alpha;
-    context.translate(food.x, food.y);
-    if (food.type === "fish") {
-      context.fillStyle = "#df8460";
-      context.beginPath();
-      context.ellipse(-2, 0, 15, 9, -0.08, 0, Math.PI * 2);
-      context.fill();
-      context.beginPath();
-      context.moveTo(10, 0);
-      context.lineTo(23, -10);
-      context.lineTo(22, 10);
-      context.closePath();
-      context.fillStyle = "#c76b50";
-      context.fill();
-      context.fillStyle = "#fff8e9";
-      context.beginPath();
-      context.arc(-9, -2, 2, 0, Math.PI * 2);
-      context.fill();
-    } else if (food.type === "cube") {
-      context.rotate(0.12);
-      context.fillStyle = "#ba774d";
-      context.beginPath();
-      context.roundRect(-14, -14, 28, 28, 7);
-      context.fill();
-      context.fillStyle = "rgba(255,255,255,0.2)";
-      context.beginPath();
-      context.roundRect(-10, -10, 16, 7, 3);
-      context.fill();
-    } else {
-      context.fillStyle = "#8da995";
-      context.beginPath();
-      context.roundRect(-15, -13, 30, 26, 6);
-      context.fill();
-      context.fillStyle = "#dfe8dc";
-      context.fillRect(-15, -9, 30, 6);
-      context.fillStyle = "#f5d9c5";
-      context.beginPath();
-      context.arc(0, 3, 5, 0, Math.PI * 2);
-      context.fill();
-    }
-    context.restore();
+    this.drawPackItem(context, food.item, food.x, food.y, food.radius * 2.5, alpha);
   }
 
   drawBall(context, ball) {
-    const gradient = context.createRadialGradient(ball.x - 6, ball.y - 7, 2, ball.x, ball.y, ball.radius);
-    gradient.addColorStop(0, "#fff4cd");
-    gradient.addColorStop(0.22, "#e88363");
-    gradient.addColorStop(1, "#bd5a47");
-    context.fillStyle = gradient;
-    context.beginPath();
-    context.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-    context.fill();
+    this.drawPackItem(context, ball.item, ball.x, ball.y, ball.radius * 2.2);
   }
 
   drawBoxBack(context, box) {
-    context.save();
-    context.fillStyle = "#bd8550";
-    context.beginPath();
-    context.roundRect(box.x, box.y + 20, box.width, box.height - 20, 6);
-    context.fill();
-    context.fillStyle = "#d7aa73";
-    context.beginPath();
-    context.moveTo(box.x + 2, box.y + 22);
-    context.lineTo(box.x + 24, box.y - 5);
-    context.lineTo(box.x + box.width / 2, box.y + 20);
-    context.closePath();
-    context.fill();
-    context.beginPath();
-    context.moveTo(box.x + box.width - 2, box.y + 22);
-    context.lineTo(box.x + box.width - 25, box.y - 5);
-    context.lineTo(box.x + box.width / 2, box.y + 20);
-    context.closePath();
-    context.fill();
-    context.restore();
+    this.drawPackItem(
+      context,
+      box.item,
+      box.x + box.width / 2,
+      box.y + box.height / 2,
+      Math.max(box.width, box.height) * 1.18,
+    );
   }
 
-  drawBoxFront(context, box) {
-    context.save();
-    context.fillStyle = "#c99258";
-    context.beginPath();
-    context.roundRect(box.x, box.y + 41, box.width, box.height - 41, [2, 2, 7, 7]);
-    context.fill();
-    context.fillStyle = "rgba(111,70,39,0.2)";
-    context.fillRect(box.x + box.width / 2 - 1, box.y + 43, 2, box.height - 45);
-    context.strokeStyle = "rgba(111,70,39,0.22)";
-    context.lineWidth = 2;
-    context.beginPath();
-    context.moveTo(box.x + 11, box.y + 51);
-    context.lineTo(box.x + box.width - 11, box.y + 51);
-    context.stroke();
-    context.restore();
-  }
+  drawBoxFront() {}
 
   drawWand(context) {
-    const { x, y } = this.wand;
+    const { x, y, item } = this.wand;
+    this.drawPackItem(context, item, x, y, 88 * (item?.scale ?? 1));
+  }
+
+  drawPackItem(context, item, x, y, size, alpha = 1) {
+    if (!item?.image) return;
     context.save();
-    context.strokeStyle = "#6f5d55";
-    context.lineWidth = 3;
-    context.lineCap = "round";
-    context.beginPath();
-    context.moveTo(x - 60, y - 76);
-    context.lineTo(x - 6, y - 10);
-    context.stroke();
-    context.strokeStyle = "rgba(111,93,85,0.55)";
-    context.lineWidth = 1.4;
-    context.beginPath();
-    context.moveTo(x - 6, y - 10);
-    context.quadraticCurveTo(x + 4, y - 4, x, y + 3);
-    context.stroke();
-    context.fillStyle = "#d96f55";
-    context.beginPath();
-    context.ellipse(x + 3, y + 4, 13, 6, 0.5, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = "#efb875";
-    context.beginPath();
-    context.ellipse(x - 4, y + 7, 11, 5, -0.28, 0, Math.PI * 2);
-    context.fill();
+    context.globalAlpha = alpha;
+    const ratio = item.image.width / item.image.height || 1;
+    const width = ratio >= 1 ? size : size * ratio;
+    const height = ratio >= 1 ? size / ratio : size;
+    context.drawImage(item.image, x - width / 2, y - height / 2, width, height);
     context.restore();
   }
 
@@ -1226,8 +1293,9 @@ function roundedRegion(bounds, padding = 0) {
 }
 
 class OnboardingGuide {
-  constructor(elements, savedDone, onComplete) {
+  constructor(elements, steps, savedDone, onComplete) {
     this.elements = elements;
+    this.steps = steps;
     this.index = 0;
     this.done = Boolean(savedDone);
     this.onComplete = onComplete;
@@ -1242,19 +1310,20 @@ class OnboardingGuide {
   }
 
   render() {
-    const step = GUIDE_STEPS[this.index];
+    const step = this.steps[this.index];
     this.elements.kicker.textContent = step.kicker;
     this.elements.title.textContent = step.title;
     this.elements.copy.textContent = step.copy;
-    this.elements.next.textContent = this.index === GUIDE_STEPS.length - 1 ? "开始陪伴" : "下一步";
+    this.elements.next.textContent = this.index === this.steps.length - 1 ? "开始陪伴" : "下一步";
     [...this.elements.progress.children].forEach((node, index) => {
+      node.hidden = index >= this.steps.length;
       node.classList.toggle("is-done", index < this.index);
       node.classList.toggle("is-current", index === this.index);
     });
   }
 
   next() {
-    if (this.index >= GUIDE_STEPS.length - 1) {
+    if (this.index >= this.steps.length - 1) {
       this.complete();
       return;
     }
@@ -1263,7 +1332,7 @@ class OnboardingGuide {
   }
 
   noteAction(action) {
-    if (this.done || GUIDE_STEPS[this.index]?.action !== action) return;
+    if (this.done || this.steps[this.index]?.action !== action) return;
     window.setTimeout(() => this.next(), 420);
   }
 
@@ -1282,12 +1351,21 @@ class DesktopPetApp {
       foodPopover: document.querySelector("#food-popover"),
       toyPopover: document.querySelector("#toy-popover"),
       petpackPopover: document.querySelector("#petpack-popover"),
+      foodChoices: document.querySelector("#food-choices"),
+      toyChoices: document.querySelector("#toy-choices"),
       petButton: document.querySelector("#pet-button"),
       feedButton: document.querySelector("#feed-button"),
       toyButton: document.querySelector("#toy-button"),
+      edgeButton: document.querySelector("#edge-button"),
       quietButton: document.querySelector("#quiet-button"),
       petpackButton: document.querySelector("#petpack-button"),
       importPetpackButton: document.querySelector("#import-petpack-button"),
+      importItempackButton: document.querySelector("#import-itempack-button"),
+      installedPacks: document.querySelector("#installed-packs"),
+      quitAppButton: document.querySelector("#quit-app-button"),
+      emptyShell: document.querySelector("#empty-shell"),
+      emptyImportPet: document.querySelector("#empty-import-pet"),
+      emptyImportItem: document.querySelector("#empty-import-item"),
       quietStatus: document.querySelector("#quiet-status"),
       guide: document.querySelector("#guide"),
       guideKicker: document.querySelector("#guide-kicker"),
@@ -1324,6 +1402,12 @@ class DesktopPetApp {
       petBridge.loadShellState()
     ]);
     const rendererState = savedState?.rendererState ?? savedState?.petState ?? savedState ?? {};
+    await this.world.load(catalog, savedState);
+    const guideSteps = GUIDE_STEPS.filter((step) => {
+      if (step.action === "feed") return this.world.itemsFor("food").length > 0;
+      if (step.action === "toy") return this.world.itemsFor("toy").length > 0;
+      return true;
+    });
     this.guide = new OnboardingGuide(
       {
         root: this.elements.guide,
@@ -1334,28 +1418,30 @@ class DesktopPetApp {
         skip: this.elements.guideSkip,
         progress: this.elements.guideProgress
       },
+      guideSteps,
       rendererState.guideDone,
       () => {
-        this.toast("准备好了，随时和它们玩");
+        this.toast("准备好了，随时和宠物互动");
         this.requestSave();
         this.publishRegions(true);
       }
     );
 
-    await this.world.load(catalog, savedState);
+    this.syncCatalogUi();
     if (typeof shellState?.quiet === "boolean" && shellState.quiet !== this.world.quiet) {
       this.world.quiet = shellState.quiet;
       this.onQuietChanged(shellState.quiet, false);
     }
     window.setTimeout(() => {
-      this.guide.show();
+      if (this.world.pets.length) this.guide.show();
       this.publishRegions(true);
     }, 650);
     this.unsubscribeState = petBridge.onStateChanged((state) => this.applyExternalState(state));
     this.unsubscribeCatalog = petBridge.onCatalogChanged((payload) => {
       const nextCatalog = payload?.catalog ?? payload;
       this.world.reloadCatalog(nextCatalog).then(() => {
-        this.toast("宠物目录已更新");
+        this.syncCatalogUi();
+        this.toast("宠物与道具目录已更新");
         this.requestSave();
       }).catch((error) => console.error("Unable to refresh pet catalog", error));
     });
@@ -1366,23 +1452,35 @@ class DesktopPetApp {
     this.elements.petButton.addEventListener("click", () => this.world.petPet());
     this.elements.feedButton.addEventListener("click", () => this.togglePopover("food"));
     this.elements.toyButton.addEventListener("click", () => this.togglePopover("toy"));
+    this.elements.edgeButton.addEventListener("click", () => {
+      this.world.triggerEdgeScene();
+      this.closePopovers();
+    });
     this.elements.quietButton.addEventListener("click", () => this.world.setQuiet(!this.world.quiet));
     this.elements.petpackButton.addEventListener("click", () => this.togglePopover("petpack"));
     this.elements.importPetpackButton.addEventListener("click", () => this.importPetpack());
+    this.elements.importItempackButton.addEventListener("click", () => this.importItempack());
+    this.elements.emptyImportPet.addEventListener("click", () => this.importPetpack());
+    this.elements.emptyImportItem.addEventListener("click", () => this.importItempack());
+    this.elements.installedPacks.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-remove-kind][data-pack-id]");
+      if (!button) return;
+      this.removePack(
+        button.dataset.removeKind,
+        button.dataset.packId,
+        button.dataset.packName
+      );
+    });
+    this.elements.quitAppButton.addEventListener("click", () => this.quitApp());
 
-    for (const button of this.elements.foodPopover.querySelectorAll("[data-food]")) {
-      button.addEventListener("pointerdown", (event) => this.beginFoodPointer(event, button.dataset.food));
-    }
-
-    for (const button of this.elements.toyPopover.querySelectorAll("[data-toy]")) {
-      button.addEventListener("click", () => {
-        const toy = button.dataset.toy;
-        this.closePopovers();
-        if (toy === "ball") this.world.spawnBall();
-        if (toy === "wand") this.world.toggleWand();
-        if (toy === "box") this.world.spawnBox();
-      });
-    }
+    this.elements.foodChoices.addEventListener("pointerdown", (event) => {
+      const button = event.target.closest("[data-item-id]");
+      if (button) this.beginFoodPointer(event, button.dataset.itemId);
+    });
+    this.elements.toyChoices.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-item-id]");
+      if (button) this.playToy(button.dataset.itemId);
+    });
 
     window.addEventListener("pointermove", (event) => {
       if (this.foodPointerSession) this.moveFoodPointer(event);
@@ -1416,17 +1514,19 @@ class DesktopPetApp {
     });
   }
 
-  beginFoodPointer(event, type) {
+  beginFoodPointer(event, itemId) {
+    const item = this.world.itemsFor("food").find((candidate) => candidate.id === itemId);
+    if (!item) return;
     event.preventDefault();
     event.stopPropagation();
     this.foodPointerSession = {
       pointerId: event.pointerId,
-      type,
+      itemId,
       startX: event.clientX,
       startY: event.clientY,
       moved: false
     };
-    this.world.startFoodDrag(type, event.clientX, event.clientY);
+    this.world.startFoodDrag(item, event.clientX, event.clientY);
     this.publishRegions(true);
   }
 
@@ -1485,12 +1585,14 @@ class DesktopPetApp {
       return;
     }
     this.elements.importPetpackButton.disabled = true;
+    this.elements.emptyImportPet.disabled = true;
     try {
       const result = await petBridge.importPetpack();
       if (result?.canceled || result?.cancelled) return;
       if (result?.error) throw new Error(result.error);
       const catalog = result?.catalog ?? await petBridge.loadPetCatalog();
       await this.world.reloadCatalog(catalog);
+      this.syncCatalogUi();
       const name = result?.manifest?.displayName ?? result?.manifest?.name ?? result?.petId ?? "新宠物";
       this.toast(`${name}已经加入宠物目录`);
       this.requestSave();
@@ -1499,6 +1601,156 @@ class DesktopPetApp {
       this.toast(error?.message ? `导入失败：${error.message}` : "宠物包没有导入成功");
     } finally {
       this.elements.importPetpackButton.disabled = false;
+      this.elements.emptyImportPet.disabled = false;
+    }
+  }
+
+  async removePack(kind, id, name) {
+    const label = name || id;
+    const confirmed = window.confirm(`确定移除“${label}”吗？之后仍可重新导入安装包。`);
+    if (!confirmed) return;
+    this.closePopovers();
+    try {
+      const result = kind === "pet"
+        ? await petBridge.removePetpack(id)
+        : await petBridge.removeItempack(id);
+      const catalog = result?.catalog ?? await petBridge.loadPetCatalog();
+      await this.world.reloadCatalog(catalog);
+      this.syncCatalogUi();
+      this.toast(`${label}已从本机移除`);
+      this.requestSave();
+    } catch (error) {
+      console.error(error);
+      this.toast(error?.message ? `移除失败：${error.message}` : "没有移除成功");
+    }
+  }
+
+  async quitApp() {
+    this.closePopovers();
+    try {
+      await petBridge.quitApp();
+    } catch (error) {
+      console.error(error);
+      this.toast("暂时无法退出，请从系统托盘菜单选择“退出”");
+    }
+  }
+
+  async importItempack() {
+    this.closePopovers();
+    if (!petBridge.canImportItempack) {
+      this.toast("浏览器预览中无法导入，桌面程序里可以使用");
+      return;
+    }
+    this.elements.importItempackButton.disabled = true;
+    this.elements.emptyImportItem.disabled = true;
+    try {
+      const result = await petBridge.importItempack();
+      if (result?.canceled || result?.cancelled) return;
+      if (result?.error) throw new Error(result.error);
+      const catalog = result?.catalog ?? await petBridge.loadPetCatalog();
+      await this.world.reloadCatalog(catalog);
+      this.syncCatalogUi();
+      const name = result?.manifest?.displayName ?? result?.itempackId ?? "新道具包";
+      this.toast(`${name}已经加入互动道具目录`);
+      this.requestSave();
+    } catch (error) {
+      console.error(error);
+      this.toast(error?.message ? `导入失败：${error.message}` : "道具包没有导入成功");
+    } finally {
+      this.elements.importItempackButton.disabled = false;
+      this.elements.emptyImportItem.disabled = false;
+    }
+  }
+
+  playToy(itemId) {
+    const item = this.world.itemsFor("toy").find((candidate) => candidate.id === itemId);
+    if (!item) return;
+    this.closePopovers();
+    if (item.behavior === "ball") this.world.spawnBall(item);
+    if (item.behavior === "wand") {
+      const isSameActiveWand = this.world.wand.active && this.world.wand.item?.id === item.id;
+      this.world.toggleWand(!isSameActiveWand, item);
+    }
+    if (item.behavior === "hideout") this.world.spawnBox(item);
+  }
+
+  syncCatalogUi() {
+    const hasPet = this.world.pets.length > 0;
+    const foods = this.world.itemsFor("food");
+    const toys = this.world.itemsFor("toy");
+    this.elements.emptyShell.hidden = hasPet;
+    this.elements.petButton.disabled = !hasPet;
+    this.elements.feedButton.disabled = !hasPet || foods.length === 0;
+    this.elements.toyButton.disabled = !hasPet || toys.length === 0;
+    this.elements.edgeButton.disabled = !hasPet || this.world.reducedMotion;
+    this.elements.quietButton.disabled = !hasPet;
+    this.renderItemChoices(this.elements.foodChoices, foods);
+    this.renderItemChoices(this.elements.toyChoices, toys);
+    this.renderInstalledPacks();
+    if (hasPet && this.guide && !this.guide.done) this.guide.show();
+    this.publishRegions(true);
+  }
+
+  renderItemChoices(root, items) {
+    root.replaceChildren();
+    for (const item of items) {
+      const button = document.createElement("button");
+      button.className = "choice";
+      button.type = "button";
+      button.dataset.itemId = item.id;
+      const image = document.createElement("img");
+      image.className = "choice-thumb";
+      image.src = item.url;
+      image.alt = "";
+      const label = document.createElement("span");
+      label.textContent = item.name;
+      button.append(image, label);
+      root.append(button);
+    }
+  }
+
+  renderInstalledPacks() {
+    const root = this.elements.installedPacks;
+    root.replaceChildren();
+    const pets = catalogPets(this.world.catalog).map((entry) => ({
+      id: String(entry.id ?? entry.manifest?.id ?? ""),
+      name: String(entry.name ?? entry.manifest?.displayName ?? entry.id ?? "宠物包"),
+      kind: "pet",
+      type: "宠物包"
+    }));
+    const items = catalogItempacks(this.world.catalog).map((entry) => ({
+      id: String(entry.id ?? entry.manifest?.id ?? ""),
+      name: String(entry.name ?? entry.manifest?.displayName ?? entry.id ?? "道具包"),
+      kind: "item",
+      type: "道具包"
+    }));
+    const installed = [...pets, ...items].filter((entry) => entry.id);
+    if (!installed.length) {
+      const empty = document.createElement("p");
+      empty.className = "installed-pack-empty";
+      empty.textContent = "还没有安装内容包";
+      root.append(empty);
+      return;
+    }
+    for (const entry of installed) {
+      const row = document.createElement("div");
+      row.className = "installed-pack-row";
+      const copy = document.createElement("span");
+      copy.className = "installed-pack-copy";
+      const strong = document.createElement("strong");
+      strong.textContent = entry.name;
+      const small = document.createElement("small");
+      small.textContent = entry.type;
+      copy.append(strong, small);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "remove-pack-button";
+      remove.textContent = "移除";
+      remove.dataset.removeKind = entry.kind;
+      remove.dataset.packId = entry.id;
+      remove.dataset.packName = entry.name;
+      row.append(copy, remove);
+      root.append(row);
     }
   }
 
@@ -1507,7 +1759,7 @@ class DesktopPetApp {
     this.elements.quietButton.setAttribute("aria-pressed", String(quiet));
     this.elements.quietButton.classList.toggle("is-active", quiet);
     this.elements.quietStatus.hidden = !quiet;
-    if (announce) this.toast(quiet ? "包包和菲菲安静下来了" : "恢复自在活动");
+    if (announce) this.toast(quiet ? "宠物安静下来了" : "恢复自在活动");
     if (announce) petBridge.setShellState({ quiet });
     this.publishRegions(true);
   }
@@ -1557,6 +1809,7 @@ class DesktopPetApp {
       [this.elements.foodPopover, "ui:food-popover", "ui"],
       [this.elements.toyPopover, "ui:toy-popover", "ui"],
       [this.elements.petpackPopover, "ui:petpack-popover", "ui"],
+      [this.elements.emptyShell, "ui:empty-shell", "ui"],
       [this.elements.guide, "ui:guide", "ui"]
     ];
     const result = [];

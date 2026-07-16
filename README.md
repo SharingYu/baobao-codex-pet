@@ -1,46 +1,65 @@
-# 包包与菲菲 · 真实宠物桌伴
+# Pet Desktop Companion · 可售卖的空壳运行器
 
-把你真正的宠物带进电脑。无需 Codex，Windows 用户安装后即可在桌面上摸摸、投喂、玩小球、挥逗猫棒或放一个纸箱；需要专注时，一键切换安静陪伴。
+把真实宠物带进电脑，但不把任何角色内容绑进安装包。Windows 用户先安装运行器，再分别导入宠物包和道具包；三者可以独立定制、升级、交付与售卖，无需 Codex。
 
-[下载 Windows Alpha](https://github.com/SharingYu/baobao-codex-pet/releases/latest) · [定制交付流程](docs/customization-workflow.md) · [产品 PRD](docs/universal-desktop-pet-prd.md)
+> `v0.2.0-alpha` 起，安装器本身不再内置包包、菲菲或任何食物/玩具。
 
-![包包与菲菲桌面程序预览](docs/assets/desktop-alpha.png)
+[下载 Windows v0.2 Alpha](https://github.com/SharingYu/baobao-codex-pet/releases/tag/v0.2.0-alpha) · [Windows 使用指南](docs/user-guide.md) · [定制交付流程](docs/customization-workflow.md) · [产品 PRD](docs/universal-desktop-pet-prd.md)
 
-## 这版已经能做什么
+![导入包包和菲菲后的桌面效果](docs/assets/desktop-alpha.png)
 
-- 包包与菲菲同时生活在透明桌面层，可自主待机、走动和观察指针。
-- 点击摸摸，按住拖动到喜欢的位置。
-- 投喂小鱼干、冻干和罐罐；食物可直接拖到桌面。
-- 小球会弹跳，宠物会追逐和扑击；另有逗猫棒与纸箱。
-- 安静模式停止主动邀请，但宠物仍会陪伴。
-- 空白区域点击穿透，不挡住正常工作；托盘始终可显隐或退出。
-- 位置、安静模式和互动状态在本地保存，重启后恢复。
-- 安全导入 `.petpack`，一套程序可承载不同客户的定制宠物。
+<p align="center">导入示例宠物包后的桌面效果；安装器首次启动仍是空壳。</p>
 
-核心定位是“真实宠物的无压力数字分身”：没有死亡、断签、强制饥饿或好感惩罚，互动用于表达性格，而不是制造负担。
-
-## Windows 体验版
-
-1. 从 [Releases](https://github.com/SharingYu/baobao-codex-pet/releases) 下载 `PetDesktop-0.1.0-alpha-x64.exe`。
-2. 运行安装程序并启动 **Pet Desktop Companion**。
-3. 通过底部操作条体验摸摸、投喂、玩具与安静模式。
-4. 点击操作条右侧的导入图标，可安装定制 `.petpack`。
-
-Alpha 安装包尚未购买商业代码签名证书，Windows SmartScreen 可能显示“未知发布者”。正式销售版必须签名。
-
-## 从照片到客户桌面的闭环
+## 三层交付
 
 ```text
-客户照片/视频
-    → 角色与动作生成
-    → 透明图集质检
-    → Codex v2 / 通用 petpack 转换
-    → 安全校验与打包
-    → 客户在桌面程序中一键导入
-    → 摸摸/投喂/玩具/存档验收
+Pet Desktop Companion（免费/基础运行器）
+  ├─ .petpack   一只真实宠物的动作图集与行为映射
+  └─ .itempack  食物、玩具、藏身处等互动素材与受限行为
 ```
 
-已有 Codex v2 宠物可以直接转换：
+- 运行器只负责透明桌面、点击穿透、物理互动、存档、托盘与安全导入。
+- 宠物包只包含声明式 manifest 和透明 PNG/WebP 动画图集。
+- 道具包只包含声明式 manifest 和 PNG/WebP 素材；行为限定为零食、弹球、逗玩与藏身处，包内不能执行脚本。
+- 用户可购买一只宠物、一个主题道具包，或单独替换任一内容包，而不必重装程序。
+
+## Alpha 已实现
+
+- 空壳启动页：未装宠物时不会显示默认角色。
+- 独立导入 `.petpack` 与 `.itempack`，文件落在用户数据目录，不改安装目录。
+- 宠物：摸摸、拖动、安静陪伴、本地位置恢复。
+- 道具：从已安装道具包动态读取食物、小球、逗玩道具、藏身处及对应图片。
+- 场景：宠物会在屏幕工作区边缘跑动，并从边缘跳下；底部“边缘”按钮可立即触发。
+- 透明区域点击穿透；托盘可显示、隐藏、安静或退出。
+
+## 下载、安装与首次打开
+
+1. 从 GitHub Release `v0.2.0-alpha` 下载 `PetDesktop-0.2.0-alpha-x64.exe`、两个示例 `.petpack`、`starter-play-kit.itempack` 和校验和文件。
+2. 运行安装器，可按提示选择目录。安装完成后，从桌面快捷方式或 Windows“开始”菜单打开 **Pet Desktop Companion**。
+3. 首次启动是正常的空壳状态。点击“导入宠物包”，选择 `baobao.petpack`；再从底部最右侧的内容包管理按钮导入 `feifei.petpack`。
+4. 在同一管理区点击“导入道具包”，选择 `starter-play-kit.itempack`。随后“投喂”和“玩具”会显示包内道具。
+
+公开 Alpha 暂未使用商业代码签名证书，Windows 可能显示 SmartScreen。请只从本仓库 Release 下载，并先核对 SHA-256：
+
+```powershell
+Get-FileHash .\PetDesktop-0.2.0-alpha-x64.exe -Algorithm SHA256
+```
+
+确认结果与 `SHA256SUMS-v0.2.0-alpha.txt` 一致后，可选择“更多信息”→“仍要运行”。完整操作见 [Windows 使用指南](docs/user-guide.md)。
+
+## 互动与正确退出
+
+- 点击宠物或“摸摸”会互动；按住宠物可拖动位置。
+- “投喂”选择零食；“玩具”选择毛线球、逗玩道具或小屋。
+- “边缘”让宠物沿屏幕工作区边缘跑动并跳跃；“安静”暂停主动陪伴。
+- 单击系统托盘图标显示或隐藏宠物；右键可显示互动条、切换安静模式或退出。
+- 隐藏不等于退出。请使用底部内容包管理区的“退出程序”，或右键托盘图标选择“退出”。
+
+包包、菲菲和起步道具均是独立示例内容，不会随运行器安装。
+
+## 打包与交付
+
+### 宠物包
 
 ```powershell
 node tools/petpack/convert-codex.mjs --input pets/my-cat --output petpacks/my-cat
@@ -48,24 +67,22 @@ node tools/petpack/cli.mjs validate petpacks/my-cat
 node tools/petpack/cli.mjs pack petpacks/my-cat release/petpacks/my-cat.petpack
 ```
 
-`.petpack` 是声明式 ZIP 容器。导入器会检查路径穿越、符号链接、Windows 保留路径、文件数量与体积、图片尺寸、SHA-256、未声明文件及主动/可执行内容；宠物包不能执行 JavaScript 或系统命令。
+### 道具包
 
-当前 Alpha 运行器只接受与 Codex v2 相同的 `192 × 208` 单格、`8 × 11` 图集与 16 个注视方向。其他合法布局会在导入时明确拒绝，避免“导入成功但显示错帧”；后续版本再切换为完全由 manifest 驱动的渲染。
-
-## 同时支持 Codex 宠物
-
-原始 Codex v2 包仍保留在：
-
-- `pets/baobao`
-- `pets/feifei`
-
-复制到以下目录即可在 Codex 中选择：
-
-```text
-%USERPROFILE%\.codex\pets\
+```powershell
+node tools/itempack/cli.mjs validate itempacks/starter-play-kit
+node tools/itempack/cli.mjs pack itempacks/starter-play-kit release/itempacks/starter-play-kit.itempack
 ```
 
-每只宠物包含 `1536 × 2288`、11 行动画图集和 16 个注视方向。
+两种导入器都会拒绝路径穿越、符号链接、Windows 保留路径、主动/可执行内容、超大文件、哈希不匹配和未声明资源。
+
+## 边框与页面互动的边界
+
+当前版本已经使用**屏幕工作区边缘**作为可见场景：跑到边缘、跳下、落回桌面，不读取其他程序内容。
+
+下一层可以做“前台窗口边框轨道”：在用户明确开启后，仅读取当前窗口的几何矩形，让宠物沿标题栏、窗口边缘和任务栏跑跳。网页正文、聊天内容、文档文字不需要也不会被读取。若未来要做“看到页面里的鱼、光标或视频再反应”，必须做成单独的、按应用授权的辅助功能，并在本地处理与可随时关闭；不能默认扫描屏幕内容。
+
+详细方案见 [窗口边缘场景与隐私边界](docs/window-edge-scenes.md) 与 [定制交付流程](docs/customization-workflow.md)。
 
 ## 本地开发
 
@@ -73,27 +90,24 @@ node tools/petpack/cli.mjs pack petpacks/my-cat release/petpacks/my-cat.petpack
 
 ```powershell
 pnpm install
-pnpm dev
 pnpm check
+pnpm dev
 pnpm dist:win
 ```
 
-项目结构：
-
 ```text
-apps/desktop/electron   透明窗口、托盘、点击穿透、导入与原子存档
-apps/desktop/renderer   Canvas 动画、互动、玩具与新手引导
-packages/pet-schema    .petpack v1 JSON Schema 与 TypeScript 类型
-tools/petpack          转换、验证、打包和导入工具
-petpacks               通用宠物包示例
-pets                   Codex v2 宠物包
-docs                   PRD、架构和定制交付流程
+apps/desktop/electron   透明窗口、托盘、点击穿透、独立包导入与原子存档
+apps/desktop/renderer   Canvas 动画、包驱动的互动与边缘场景
+packages/pet-schema    .petpack v1 Schema 与类型
+packages/item-schema   .itempack v1 Schema 与类型
+tools/petpack          宠物转换、验证、打包和导入工具
+tools/itempack         道具验证、打包和导入工具
+petpacks               包包、菲菲独立宠物包示例
+itempacks              独立道具包示例
 ```
-
-详细安全边界与迁移思路见 [桌面程序架构](docs/desktop-architecture.md)。
 
 ## 隐私与授权
 
-公开仓库只包含由宠物照片重新绘制的动画图集，不包含原始照片、私人视频、EXIF 或社交平台水印。客户素材应在私有工作目录处理，交付或退款后按约定删除。
+客户原始照片、视频、EXIF 和社交平台水印只应存在于私有制作目录，不能提交到公开仓库。交付包只含重绘的动画或道具资源与声明式配置。
 
-代码与工具采用 [MIT License](LICENSE)。包包、菲菲的角色形象和动画资产采用单独的 [`LicenseRef-Personal-Display-Only`](LICENSES/LicenseRef-Personal-Display-Only.txt)，可随本项目个人、非商业使用，但不得再售、重新托管、训练模型或用于其他商业产品；具体文件边界见 [NOTICE](NOTICE.md)。
+代码、Schema、工具和起步道具包采用 [MIT License](LICENSE)。包包、菲菲的角色形象和动画资产采用单独的 [`LicenseRef-Personal-Display-Only`](LICENSES/LicenseRef-Personal-Display-Only.txt)，具体边界见 [NOTICE](NOTICE.md)。

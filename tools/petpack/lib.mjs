@@ -593,21 +593,42 @@ export function readPetpackArchiveBuffer(buffer) {
   return entries;
 }
 
-export async function readBundle(input) {
+export async function readBundleWithExtension(input, extension = '.petpack') {
+  const expectedExtension = String(extension).toLowerCase();
+  if (!/^\.[a-z0-9]+$/u.test(expectedExtension)) {
+    fail('INVALID_EXTENSION', `Bundle extension ${JSON.stringify(extension)} is not supported`);
+  }
   const absolute = path.resolve(input);
   const info = await lstat(absolute).catch(() => null);
   if (!info) fail('NOT_A_BUNDLE', `${input} does not exist`);
   if (info.isSymbolicLink()) fail('SYMLINK_REJECTED', 'Bundle root cannot be a symbolic link');
   if (info.isDirectory()) return { type: 'directory', entries: await readDirectoryBundle(absolute) };
   if (!info.isFile()) fail('NOT_A_BUNDLE', `${input} is not a regular file or directory`);
-  if (path.extname(absolute).toLowerCase() !== '.petpack') fail('NOT_A_BUNDLE', 'Archive filename must end in .petpack');
+  if (path.extname(absolute).toLowerCase() !== expectedExtension) {
+    fail('NOT_A_BUNDLE', `Archive filename must end in ${expectedExtension}`);
+  }
   if (info.size > LIMITS.maxTotalBytes + 16 * 1024 * 1024) fail('LIMIT_EXCEEDED', 'Compressed archive is unreasonably large');
   return { type: 'archive', entries: readPetpackArchiveBuffer(await readFile(absolute)) };
 }
 
+export async function readBundle(input) {
+  return readBundleWithExtension(input, '.petpack');
+}
+
+export async function validateBundleWith(input, extension, validateEntries) {
+  if (typeof validateEntries !== 'function') {
+    fail('INVALID_VALIDATOR', 'A bundle validator function is required');
+  }
+  const bundle = await readBundleWithExtension(input, extension);
+  return {
+    ...validateEntries(bundle.entries),
+    bundleType: bundle.type,
+    source: path.resolve(input),
+  };
+}
+
 export async function validateBundle(input) {
-  const bundle = await readBundle(input);
-  return { ...validateBundleEntries(bundle.entries), bundleType: bundle.type, source: path.resolve(input) };
+  return validateBundleWith(input, '.petpack', validateBundleEntries);
 }
 
 async function writeAtomically(output, data) {
@@ -623,17 +644,27 @@ async function writeAtomically(output, data) {
   }
 }
 
-export async function packBundle(directory, output) {
+export async function packBundleWith(directory, output, extension, validateEntries) {
+  if (typeof validateEntries !== 'function') {
+    fail('INVALID_VALIDATOR', 'A bundle validator function is required');
+  }
+  const expectedExtension = String(extension).toLowerCase();
   const entries = await readDirectoryBundle(directory);
-  const report = validateBundleEntries(entries);
+  const report = validateEntries(entries);
   const archive = createPetpackArchive(entries);
-  if (path.extname(output).toLowerCase() !== '.petpack') fail('INVALID_OUTPUT', 'Packed output filename must end in .petpack');
+  if (path.extname(output).toLowerCase() !== expectedExtension) {
+    fail('INVALID_OUTPUT', `Packed output filename must end in ${expectedExtension}`);
+  }
   await access(path.resolve(output), fsConstants.F_OK).then(
     () => fail('DESTINATION_EXISTS', `Output ${output} already exists`),
     () => {},
   );
   await writeAtomically(output, archive);
   return { ...report, archive: path.resolve(output), archiveBytes: archive.length };
+}
+
+export async function packBundle(directory, output) {
+  return packBundleWith(directory, output, '.petpack', validateBundleEntries);
 }
 
 function safeOutputPath(root, entryPath) {
@@ -646,9 +677,12 @@ function safeOutputPath(root, entryPath) {
   return target;
 }
 
-export async function importBundle(input, destination) {
-  const bundle = await readBundle(input);
-  const report = validateBundleEntries(bundle.entries);
+export async function importBundleWith(input, destination, extension, validateEntries) {
+  if (typeof validateEntries !== 'function') {
+    fail('INVALID_VALIDATOR', 'A bundle validator function is required');
+  }
+  const bundle = await readBundleWithExtension(input, extension);
+  const report = validateEntries(bundle.entries);
   const absoluteDestination = path.resolve(destination);
   await access(absoluteDestination, fsConstants.F_OK).then(
     () => fail('DESTINATION_EXISTS', `Destination ${destination} already exists`),
@@ -669,4 +703,8 @@ export async function importBundle(input, destination) {
     throw error;
   }
   return { ...report, destination: absoluteDestination, sourceType: bundle.type };
+}
+
+export async function importBundle(input, destination) {
+  return importBundleWith(input, destination, '.petpack', validateBundleEntries);
 }
