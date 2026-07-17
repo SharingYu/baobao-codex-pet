@@ -227,6 +227,7 @@ class DesktopPetApp {
       this.world.quiet = shellState.quiet;
       this.onQuietChanged(shellState.quiet, false);
     }
+    this.world.setSuspended(shellState?.visible === false);
     this.setInteractionBarVisible(shellState?.interactionBarVisible !== false);
     window.setTimeout(() => {
       if (this.world.pets.length) this.guide.show();
@@ -754,6 +755,7 @@ class DesktopPetApp {
 
   applyExternalState(state) {
     if (!state || typeof state !== "object") return;
+    if (typeof state.visible === "boolean") this.world.setSuspended(!state.visible);
     if (typeof state.quiet === "boolean" && state.quiet !== this.world.quiet) this.world.setQuiet(state.quiet);
     if (typeof state.interactionBarVisible === "boolean") {
       this.setInteractionBarVisible(state.interactionBarVisible);

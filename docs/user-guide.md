@@ -2,24 +2,24 @@
 
 ## 1. 下载、安装和打开
 
-从 GitHub Release `v0.3.0-alpha` 下载：
+从 GitHub Release `v0.3.1-alpha` 下载：
 
-- `PetDesktop-0.3.0-alpha-x64.exe`：Windows 安装版；
-- `PetDesktop-Portable-0.3.0-alpha-x64.exe`：免安装便携版，可选；
+- `PetDesktop-0.3.1-alpha-x64.exe`：Windows 安装版；
+- `PetDesktop-Portable-0.3.1-alpha-x64.exe`：免安装便携版，可选；
 - `baobao.petpack`；
 - `feifei.petpack`；
 - `starter-play-kit.itempack`；
-- `SHA256SUMS-v0.3.0-alpha.txt`。
+- `SHA256SUMS-v0.3.1-alpha.txt`。
 
 运行安装器后，从桌面快捷方式或 Windows“开始”菜单打开 **Pet Desktop Companion**。如果程序已经运行，再次打开快捷方式只会唤醒现有实例，不会启动第二份。
 
 本公开 Alpha 尚未使用商业代码签名，SmartScreen 可能显示“未知发布者”。请只从本仓库 Release 下载，并在 PowerShell 中核对文件：
 
 ```powershell
-Get-FileHash .\PetDesktop-0.3.0-alpha-x64.exe -Algorithm SHA256
+Get-FileHash .\PetDesktop-0.3.1-alpha-x64.exe -Algorithm SHA256
 ```
 
-结果与 `SHA256SUMS-v0.3.0-alpha.txt` 一致时，可选择“更多信息”→“仍要运行”。
+结果与 `SHA256SUMS-v0.3.1-alpha.txt` 一致时，可选择“更多信息”→“仍要运行”。
 
 ## 2. 完整首次使用流程
 
@@ -62,16 +62,22 @@ Get-FileHash .\PetDesktop-0.3.0-alpha-x64.exe -Algorithm SHA256
 
 - 单击托盘图标：显示或隐藏宠物；
 - 双击托盘图标：显示宠物和底部互动条；
-- 右键托盘图标：显示/隐藏、切换安静模式、显示互动条或退出。
+- 右键托盘图标：显示/隐藏、切换安静模式、显示互动条、修复卡顿或退出。
 
 隐藏宠物不等于退出程序。正确退出有两种方式：
 
 1. 点击底部内容包管理按钮，再点击“退出程序”；
 2. 右键系统托盘图标，选择“退出”。
 
-若界面看起来没有响应，先尝试托盘“显示互动条”或“退出”。托盘也无响应时，按 `Ctrl + Shift + Esc` 打开任务管理器，结束 **Pet Desktop Companion**，再从快捷方式重新打开。
+若界面看起来没有响应，先选择托盘“修复卡顿（重载宠物）”。v0.3.1 也会在渲染器无响应或 GPU 进程意外退出时自动恢复；诊断记录保存在 `%APPDATA%\pet-desktop-companion\diagnostics.log`。
 
-## 7. 卸载和本地数据
+## 7. 录屏与视频应用兼容
+
+v0.3.1 将透明宠物舞台限制为 30fps 和受控像素预算，并在 Canvas、渲染进程或 GPU 上下文异常后自动续帧或重载，降低与浏览器视频、播放器和录屏工具同时运行时的资源竞争。
+
+录制时请选择录屏软件的“显示器捕获 / 屏幕捕获 / 全屏捕获”。“窗口捕获”通常只录制被选择应用自己的窗口，无法包含作为独立透明窗口运行的桌面宠物；这是 Windows 窗口捕获模型的边界，不代表宠物没有渲染。程序显式保持内容保护关闭，因此标准屏幕捕获可以包含宠物。
+
+## 8. 卸载和本地数据
 
 在 Windows“设置”→“应用”→“已安装的应用”中找到 **Pet Desktop Companion** 并选择“卸载”。
 

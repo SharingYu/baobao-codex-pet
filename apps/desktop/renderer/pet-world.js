@@ -8,6 +8,18 @@ import { mergePetHistory, migrateRendererState } from "./state.js";
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const randomBetween = (min, max) => min + Math.random() * (max - min);
 const now = () => performance.now();
+const TARGET_RENDER_INTERVAL_MS = 1000 / 30;
+const MAX_CANVAS_PIXELS = 3_200_000;
+const MAX_CANVAS_DPR = 1.25;
+const MIN_CANVAS_DPR = 0.65;
+
+export function canvasDprForViewport(width, height, deviceDpr = 1) {
+  const safeWidth = Math.max(1, Number(width) || 1);
+  const safeHeight = Math.max(1, Number(height) || 1);
+  const safeDeviceDpr = Math.max(MIN_CANVAS_DPR, Number(deviceDpr) || 1);
+  const budgetDpr = Math.sqrt(MAX_CANVAS_PIXELS / (safeWidth * safeHeight));
+  return clamp(Math.min(safeDeviceDpr, MAX_CANVAS_DPR, budgetDpr), MIN_CANVAS_DPR, MAX_CANVAS_DPR);
+}
 
 function joinAssetUrl(base, relative) {
   if (!base) return relative;
@@ -120,7 +132,10 @@ function defaultToyDuration(item) {
 export class PetWorld {
   constructor(canvas, callbacks) {
     this.canvas = canvas;
-    this.context = canvas.getContext("2d", { alpha: true, desynchronized: true });
+    // Keep the canvas synchronized with Chromium's compositor. The former
+    // desynchronized context could bypass the normal page paint cadence, which
+    // made transparent pets unreliable in some Windows screen recorders.
+    this.context = canvas.getContext("2d", { alpha: true });
     this.callbacks = callbacks;
     this.width = 1;
     this.height = 1;
@@ -157,9 +172,28 @@ export class PetWorld {
     this.reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.lastFrameAt = now();
     this.lastRegionUpdateAt = 0;
+    this.lastFrameErrorAt = 0;
+    this.contextLost = false;
+    this.suspended = false;
     this.running = false;
     this.resize();
     this.bindCanvasEvents();
+    this.bindCanvasLifecycle();
+  }
+
+  bindCanvasLifecycle() {
+    this.canvas.addEventListener("contextlost", (event) => {
+      event.preventDefault?.();
+      this.contextLost = true;
+      console.warn("[pet-world] Canvas context lost; waiting for Chromium to restore it");
+    });
+    this.canvas.addEventListener("contextrestored", () => {
+      this.context = this.canvas.getContext("2d", { alpha: true });
+      this.contextLost = false;
+      this.resize();
+      this.lastFrameAt = now();
+      console.info("[pet-world] Canvas context restored");
+    });
   }
 
   async load(rawCatalog, savedState) {
@@ -236,7 +270,7 @@ export class PetWorld {
     const oldHeight = this.height;
     this.width = Math.max(1, window.innerWidth);
     this.height = Math.max(1, window.innerHeight);
-    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.dpr = canvasDprForViewport(this.width, this.height, window.devicePixelRatio || 1);
     this.canvas.width = Math.round(this.width * this.dpr);
     this.canvas.height = Math.round(this.height * this.dpr);
     this.canvas.style.width = `${this.width}px`;
@@ -266,15 +300,33 @@ export class PetWorld {
 
   frame(timestamp) {
     if (!this.running) return;
-    const deltaSeconds = Math.min(0.04, Math.max(0, (timestamp - this.lastFrameAt) / 1000));
-    this.lastFrameAt = timestamp;
-    this.update(deltaSeconds, timestamp);
-    this.draw(timestamp);
-    if (timestamp - this.lastRegionUpdateAt > 180) {
-      this.lastRegionUpdateAt = timestamp;
-      this.callbacks.regionsChanged();
-    }
+    // Schedule first so a transient draw/update exception never permanently
+    // kills the animation loop. A full-screen transparent overlay should not
+    // compete with video decoders at display refresh rate, so cap work at 30fps.
     requestAnimationFrame((next) => this.frame(next));
+    if (this.suspended || this.contextLost) return;
+    const elapsed = timestamp - this.lastFrameAt;
+    if (elapsed < TARGET_RENDER_INTERVAL_MS - 1) return;
+    const deltaSeconds = Math.min(0.05, Math.max(0, elapsed / 1000));
+    this.lastFrameAt = timestamp;
+    try {
+      this.update(deltaSeconds, timestamp);
+      this.draw(timestamp);
+      if (timestamp - this.lastRegionUpdateAt > 180) {
+        this.lastRegionUpdateAt = timestamp;
+        this.callbacks.regionsChanged();
+      }
+    } catch (error) {
+      if (timestamp - this.lastFrameErrorAt > 2_000) {
+        this.lastFrameErrorAt = timestamp;
+        console.error("[pet-world] Frame failed; animation loop will continue", error);
+      }
+    }
+  }
+
+  setSuspended(suspended) {
+    this.suspended = Boolean(suspended);
+    if (!this.suspended) this.lastFrameAt = now();
   }
 
   update(deltaSeconds, timestamp) {
