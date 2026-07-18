@@ -2,6 +2,9 @@ import { petBridge } from "./bridge.js";
 import { PetWorld, catalogItempacks, catalogPets } from "./pet-world.js";
 import { AFFINITY_THRESHOLDS, levelName } from "./progression.js";
 import { unwrapRendererState } from "./state.js";
+import { PET_APPEARANCE_SCALE, PET_MOVEMENT_SPEED } from "./pet-settings.js";
+
+const formatMultiplier = (value) => `${Number(Number(value).toFixed(2))}×`;
 
 const GUIDE_STEPS = [
   {
@@ -275,6 +278,20 @@ class DesktopPetApp {
     this.elements.petList.addEventListener("change", (event) => {
       const input = event.target.closest("[data-pet-visible]");
       if (input) this.world.setPetVisible(input.dataset.petVisible, input.checked);
+    });
+    this.elements.petList.addEventListener("input", (event) => {
+      const scaleInput = event.target.closest("[data-pet-scale]");
+      const speedInput = event.target.closest("[data-pet-speed]");
+      if (scaleInput) {
+        const value = this.world.setPetAppearanceScale(scaleInput.dataset.petScale, scaleInput.value);
+        const output = scaleInput.closest("label")?.querySelector("output");
+        if (output) output.value = `${Math.round(value * 100)}%`;
+        this.publishRegions(true);
+      } else if (speedInput) {
+        const value = this.world.setPetMovementSpeed(speedInput.dataset.petSpeed, speedInput.value);
+        const output = speedInput.closest("label")?.querySelector("output");
+        if (output) output.value = formatMultiplier(value);
+      }
     });
     this.elements.petList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-active-pet]");
@@ -595,7 +612,48 @@ class DesktopPetApp {
       const text = document.createElement("span");
       text.textContent = "桌面显示";
       toggle.append(input, visual, text);
-      row.append(select, toggle);
+
+      const controls = document.createElement("div");
+      controls.className = "pet-card-controls";
+      const createRange = ({ kind, label, value, min, max, step, display }) => {
+        const control = document.createElement("label");
+        control.className = "pet-card-range";
+        const header = document.createElement("span");
+        header.className = "pet-card-range-head";
+        const title = document.createElement("span");
+        title.textContent = label;
+        const output = document.createElement("output");
+        output.value = display;
+        header.append(title, output);
+        const range = document.createElement("input");
+        range.type = "range";
+        range.min = String(min);
+        range.max = String(max);
+        range.step = String(step);
+        range.value = String(value);
+        range.dataset[kind] = pet.id;
+        range.setAttribute("aria-label", `${pet.name}${label}`);
+        control.append(header, range);
+        return control;
+      };
+      controls.append(
+        createRange({
+          kind: "petScale", label: "大小", value: pet.settings.appearanceScale,
+          min: PET_APPEARANCE_SCALE.min,
+          max: PET_APPEARANCE_SCALE.max,
+          step: PET_APPEARANCE_SCALE.step,
+          display: `${Math.round(pet.settings.appearanceScale * 100)}%`
+        }),
+        createRange({
+          kind: "petSpeed", label: "速度", value: pet.settings.movementSpeed,
+          min: PET_MOVEMENT_SPEED.min,
+          max: PET_MOVEMENT_SPEED.max,
+          step: PET_MOVEMENT_SPEED.step,
+          display: formatMultiplier(pet.settings.movementSpeed)
+        })
+      );
+
+      row.append(select, toggle, controls);
       root.append(row);
     }
   }

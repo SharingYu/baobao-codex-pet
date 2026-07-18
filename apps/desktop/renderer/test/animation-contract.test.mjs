@@ -15,6 +15,18 @@ test("numeric manifest frames use frameDurationsMs and stop when loop is false",
   assert.deepEqual(animationCell({ ...animation, loop: true }, 250, false), { row: 3, column: 2 });
 });
 
+test("animation presentation metadata follows the selected cell", () => {
+  assert.deepEqual(animationCell({
+    row: 2,
+    frames: [4],
+    frameDurationsMs: [100],
+    loop: true,
+    visualScale: 1.12,
+    offsetX: -0.05,
+    offsetY: 0.08
+  }, 0, false), { row: 2, column: 4, visualScale: 1.12, offsetX: -0.05, offsetY: 0.08 });
+});
+
 test("interaction event maps and touch zones are read from the checked-in manifest path", () => {
   const waving = { row: 3, frames: [0, 1], frameDurationsMs: [100, 100], loop: false };
   const actor = Object.assign(Object.create(PetActor.prototype), {

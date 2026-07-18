@@ -51,3 +51,12 @@ test("a resting pet can be restored and selected from its card", () => {
   assert.match(renderer, /input\.dataset\.petVisible = pet\.id/);
   assert.match(renderer, /text\.textContent = "桌面显示"/);
 });
+
+test("every pet card exposes live size and movement speed controls", () => {
+  assert.match(renderer, /range\.dataset\[kind\] = pet\.id/);
+  assert.match(renderer, /kind: "petScale"[\s\S]*?label: "大小"/);
+  assert.match(renderer, /kind: "petSpeed"[\s\S]*?label: "速度"/);
+  assert.match(renderer, /setPetAppearanceScale/);
+  assert.match(renderer, /setPetMovementSpeed/);
+  assert.match(styles, /\.pet-card-controls\s*\{/);
+});

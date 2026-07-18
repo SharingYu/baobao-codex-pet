@@ -2,9 +2,9 @@
 
 把真实宠物带进电脑，但不把任何角色内容绑进安装包。Windows 用户先安装通用运行器，再分别导入宠物包和道具包；三者可以独立定制、升级、交付与售卖，用户无需 Codex。
 
-> 从 `v0.2.0-alpha` 起，安装器本身不内置包包、菲菲或任何食物/玩具；`v0.3.0-alpha` 加入多宠物选择、分部位摸摸、窗口平台和亲密度养成；`v0.3.1-alpha` 修复录屏与视频应用并发时的渲染卡顿。
+> 从 `v0.2.0-alpha` 起，安装器本身不内置包包、菲菲或任何食物/玩具；`v0.3.0-alpha` 加入多宠物选择、分部位摸摸、窗口平台和亲密度养成；`v0.3.1-alpha` 修复录屏与视频并发卡顿；`v0.3.2-alpha` 加入独立大小/速度调节、静息随机动作与拖拽抱起状态。
 
-[下载 Windows v0.3.1 Alpha](https://github.com/SharingYu/baobao-codex-pet/releases/tag/v0.3.1-alpha) · [Windows 使用指南](docs/user-guide.md) · [宠物风格目录](docs/pet-style-catalog.md) · [定制交付流程](docs/customization-workflow.md) · [内测宣传素材](marketing/DESIGN.md) · [产品 PRD](docs/universal-desktop-pet-prd.md)
+[下载 Windows v0.3.2 Alpha](https://github.com/SharingYu/baobao-codex-pet/releases/tag/v0.3.2-alpha) · [Windows 使用指南](docs/user-guide.md) · [宠物风格目录](docs/pet-style-catalog.md) · [定制交付流程](docs/customization-workflow.md) · [内测宣传素材](marketing/DESIGN.md) · [产品 PRD](docs/universal-desktop-pet-prd.md)
 
 ![Pet Desktop Companion v0.3 首批内测](marketing/out/github-hero.png)
 
@@ -26,7 +26,8 @@ Pet Desktop Companion（通用运行器）
 ## v0.3 Alpha 已实现
 
 - 空壳启动：未装宠物时不显示默认角色。
-- 宠物小屋：用真实宠物缩略图卡片选择当前宠物、独立控制桌面显隐，并继续导入 `.petpack`。
+- 宠物小屋：用真实宠物缩略图卡片选择当前宠物、独立控制桌面显隐、大小与速度，并继续导入 `.petpack`。
+- 生命感：无目标静息时会条件随机触发梳毛、腹部清洁、睡觉、伸懒腰、打哈欠或嗅闻；拖动时切换抱起姿态。
 - 多宠物：选择包包、菲菲单独或同时显示，并指定当前互动宠物。
 - 两阶段摸摸：先进入手掌模式，再点击头、背、尾巴或身体，触发不同动画。
 - 投喂和玩具：同一时间各只保留一件，可手动收起，也有 30–90 秒自动超时。
@@ -36,7 +37,7 @@ Pet Desktop Companion（通用运行器）
 
 ## 下载、安装与完整首次体验
 
-1. 从 GitHub Release `v0.3.1-alpha` 下载安装器或便携版、两个示例 `.petpack`、`starter-play-kit.itempack` 和校验和文件。
+1. 从 GitHub Release `v0.3.2-alpha` 下载安装器或便携版、两个示例 `.petpack`、`starter-play-kit.itempack` 和校验和文件。
 2. 安装并打开 **Pet Desktop Companion**；首次启动是正常空壳状态。
 3. 导入 `baobao.petpack`、`feifei.petpack` 与 `starter-play-kit.itempack`。
 4. 打开互动条“选择宠物/当前：…”进入“宠物小屋”：点击宠物卡片设为当前互动宠物，用每张卡片的“桌面显示”开关控制单独或同时出现。
@@ -45,10 +46,10 @@ Pet Desktop Companion（通用运行器）
 公开 Alpha 暂未使用商业代码签名证书，Windows 可能显示 SmartScreen。请只从本仓库 Release 下载，并先核对 SHA-256：
 
 ```powershell
-Get-FileHash .\PetDesktop-0.3.1-alpha-x64.exe -Algorithm SHA256
+Get-FileHash .\PetDesktop-0.3.2-alpha-x64.exe -Algorithm SHA256
 ```
 
-确认结果与 `SHA256SUMS-v0.3.1-alpha.txt` 一致后，可选择“更多信息”→“仍要运行”。完整操作见 [Windows 使用指南](docs/user-guide.md)。
+确认结果与 `SHA256SUMS-v0.3.2-alpha.txt` 一致后，可选择“更多信息”→“仍要运行”。完整操作见 [Windows 使用指南](docs/user-guide.md)。
 
 ## 互动与正确退出
 

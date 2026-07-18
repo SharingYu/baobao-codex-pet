@@ -4,6 +4,7 @@ import { PetActor } from "./pet-actor.js";
 import { awardAffinity, createPetProgress, normalizeProgressByPet, unlockLevelForItem } from "./progression.js";
 import { findLandingPlatform, findSnapPlatform, platformLocalX, readWindowPlatforms } from "./platforms.js";
 import { mergePetHistory, migrateRendererState } from "./state.js";
+import { normalizeAppearanceScale, normalizeMovementSpeed, normalizePetRuntimeSettings } from "./pet-settings.js";
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const randomBetween = (min, max) => min + Math.random() * (max - min);
@@ -173,6 +174,7 @@ export class PetWorld {
     this.lastFrameAt = now();
     this.lastRegionUpdateAt = 0;
     this.lastFrameErrorAt = 0;
+    this.petErrorAt = new Map();
     this.contextLost = false;
     this.suspended = false;
     this.running = false;
@@ -337,7 +339,14 @@ export class PetWorld {
     this.updateWand(timestamp);
     this.updateHideoutPlay(timestamp);
     if (this.platformInteractions && this.pets.length > 0 && timestamp >= this.platformPollAt) this.pollPlatforms(timestamp);
-    for (const pet of this.pets) pet.update(deltaSeconds, timestamp);
+    for (const pet of this.pets) {
+      try {
+        pet.update(deltaSeconds, timestamp);
+      } catch (error) {
+        this.reportPetRuntimeError(pet, "update", error, timestamp);
+        pet.recoverFromRuntimeError?.(timestamp);
+      }
+    }
     this.updateParticles(deltaSeconds);
   }
 
@@ -416,7 +425,7 @@ export class PetWorld {
       }
       const min = 16;
       const max = Math.max(min, platform.width - 16);
-      attachment.localX += attachment.direction * 38 * deltaSeconds;
+      attachment.localX += attachment.direction * 38 * (pet.movementSpeed ?? 1) * deltaSeconds;
       if (attachment.localX <= min || attachment.localX >= max) {
         attachment.localX = clamp(attachment.localX, min, max);
         attachment.direction *= -1;
@@ -544,14 +553,29 @@ export class PetWorld {
 
   draw(timestamp) {
     const context = this.context;
+    if (!context) return;
     context.clearRect(0, 0, this.width, this.height);
     if (this.box) this.drawPackItem(context, this.box.item, this.box.x + this.box.width / 2, this.box.y + this.box.height / 2, Math.max(this.box.width, this.box.height) * 1.18);
     for (const food of this.foods) this.drawPackItem(context, food.item, food.x, food.y, food.radius * 2.5);
     for (const ball of this.balls) this.drawPackItem(context, ball.item, ball.x, ball.y, ball.radius * 2.2);
-    for (const pet of [...this.pets].sort((a, b) => a.y - b.y)) pet.draw(context, timestamp, this.reducedMotion || this.quiet);
+    for (const pet of [...this.pets].sort((a, b) => a.y - b.y)) {
+      try {
+        pet.draw(context, timestamp, this.reducedMotion || this.quiet);
+      } catch (error) {
+        this.reportPetRuntimeError(pet, "draw", error, timestamp);
+      }
+    }
     if (this.wand.active) this.drawPackItem(context, this.wand.item, this.wand.x, this.wand.y, 88 * (this.wand.item?.scale ?? 1));
     if (this.foodDrag) this.drawPackItem(context, this.foodDrag.item, this.foodDrag.x, this.foodDrag.y, this.foodDrag.radius * 2.5, 0.78);
     for (const particle of this.particles) this.drawParticle(context, particle);
+  }
+
+  reportPetRuntimeError(pet, phase, error, timestamp = now()) {
+    const key = `${pet?.id ?? "unknown"}:${phase}`;
+    const previous = this.petErrorAt.get(key);
+    if (previous !== undefined && timestamp - previous < 5_000) return;
+    this.petErrorAt.set(key, timestamp);
+    console.error(`[pet-world] ${phase} failed for ${pet?.id ?? "unknown"}; other pets will continue`, error);
   }
 
   resolveTarget(target) {
@@ -685,7 +709,8 @@ export class PetWorld {
     if (movedDistance > 4) session.moved = true;
     if (session.kind === "pet" && session.moved) {
       const pet = session.item;
-      pet.dragging = true;
+      pet.setDragging?.(true, event.timeStamp);
+      if (typeof pet.setDragging !== "function") pet.dragging = true;
       pet.target = null;
       pet.insideBox = false;
       this.releaseBoxOccupant(pet);
@@ -718,8 +743,11 @@ export class PetWorld {
     } else if (session.kind === "pet") {
       const pet = session.item;
       if (session.moved) {
-        pet.dragging = false;
-        pet.setState("idle");
+        pet.setDragging?.(false, event.timeStamp);
+        if (typeof pet.setDragging !== "function") {
+          pet.dragging = false;
+          pet.setState("idle");
+        }
         this.tryAttachToPlatform(pet).then((attached) => {
           if (!attached) this.callbacks.toast(`没有命中窗口顶边，${pet.name}会安全落回桌面`);
           this.callbacks.requestSave();
@@ -992,9 +1020,20 @@ export class PetWorld {
   }
 
   cancelTransientInteractions(reason = "cancel", announce = false) {
+    const pointerSession = this.pointerSession;
     this.cancelPetting(reason, false);
     this.clearFood(reason, announce);
     this.clearToy(reason, announce);
+    if (pointerSession?.kind === "pet") {
+      pointerSession.item?.setDragging?.(false, now());
+      if (pointerSession.item && typeof pointerSession.item.setDragging !== "function") pointerSession.item.dragging = false;
+    }
+    if (pointerSession?.kind === "ball" && pointerSession.item) pointerSession.item.dragging = false;
+    try {
+      this.canvas.releasePointerCapture?.(pointerSession?.pointerId);
+    } catch {
+      // Pointer capture may already have been released by a completed item interaction.
+    }
     this.pointerSession = null;
   }
 
@@ -1057,10 +1096,38 @@ export class PetWorld {
     return true;
   }
 
+  setPetAppearanceScale(id, value) {
+    const next = normalizeAppearanceScale(value);
+    const pet = this.pets.find((candidate) => candidate.id === id);
+    const previous = pet?.appearanceScale ?? normalizePetRuntimeSettings(this.petHistory[id]).appearanceScale;
+    if (pet) pet.setAppearanceScale(next);
+    this.petHistory[id] = { ...this.petHistory[id], appearanceScale: next };
+    if (pet) this.rememberPet(pet);
+    if (next !== previous) {
+      this.callbacks.regionsChanged(true);
+      this.callbacks.requestSave();
+    }
+    return next;
+  }
+
+  setPetMovementSpeed(id, value) {
+    const next = normalizeMovementSpeed(value);
+    const pet = this.pets.find((candidate) => candidate.id === id);
+    const previous = pet?.movementSpeed ?? normalizePetRuntimeSettings(this.petHistory[id]).movementSpeed;
+    if (pet) pet.setMovementSpeed(next);
+    this.petHistory[id] = { ...this.petHistory[id], movementSpeed: next };
+    if (pet) this.rememberPet(pet);
+    if (next !== previous) this.callbacks.requestSave();
+    return next;
+  }
+
   rememberPet(pet) {
     this.petHistory[pet.id] = {
+      ...this.petHistory[pet.id],
       xRatio: this.width > pet.width ? clamp(pet.x / (this.width - pet.width), -0.2, 1.2) : 0.5,
-      yRatio: this.height > pet.height ? clamp(pet.y / (this.height - pet.height), 0, 1) : 0.5
+      yRatio: this.height > pet.height ? clamp(pet.y / (this.height - pet.height), 0, 1) : 0.5,
+      appearanceScale: normalizeAppearanceScale(pet.appearanceScale),
+      movementSpeed: normalizeMovementSpeed(pet.movementSpeed)
     };
   }
 
@@ -1069,14 +1136,21 @@ export class PetWorld {
   }
 
   installedPetSummaries() {
-    return this.definitions.map((definition) => ({
-      id: definition.id,
-      name: definition.name,
-      displayName: definition.displayName,
-      visible: this.visiblePetIds.includes(definition.id),
-      active: this.activePetId === definition.id,
-      progress: this.progressFor(definition.id)
-    }));
+    return this.definitions.map((definition) => {
+      const pet = this.pets.find((candidate) => candidate.id === definition.id);
+      const settings = pet
+        ? { appearanceScale: pet.appearanceScale, movementSpeed: pet.movementSpeed }
+        : normalizePetRuntimeSettings(this.petHistory[definition.id]);
+      return {
+        id: definition.id,
+        name: definition.name,
+        displayName: definition.displayName,
+        visible: this.visiblePetIds.includes(definition.id),
+        active: this.activePetId === definition.id,
+        progress: this.progressFor(definition.id),
+        settings
+      };
+    });
   }
 
   itemsFor(category) {
@@ -1147,7 +1221,7 @@ export class PetWorld {
     }
     this.petHistory = mergePetHistory(this.petHistory, visibleRecords);
     return {
-      version: 2,
+      version: 3,
       quiet: this.quiet,
       platformInteractions: this.platformInteractions,
       platformHintShown: this.platformHintShown,
