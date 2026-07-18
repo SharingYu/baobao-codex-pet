@@ -28,7 +28,7 @@ function installV03Dom() {
         </div>
         <button id="pet-selector-import-button" class="pet-manager-import" type="button"><span aria-hidden="true">＋</span> 添加宠物</button>
       </header>
-      <p class="pet-manager-hint">点击卡片选择当前互动宠物；打开“桌面显示”可以让多只宠物一起出现。</p>
+      <p class="pet-manager-hint">点击卡片选择当前互动宠物；每只宠物都能独立调节大小和移动速度。</p>
       <div id="pet-list" class="pet-list" role="list" aria-label="已安装宠物"></div>
       <footer class="pet-manager-footer">
         <label class="platform-setting">

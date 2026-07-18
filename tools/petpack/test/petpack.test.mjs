@@ -205,6 +205,23 @@ test('errors are typed for callers', () => {
   assert.throws(() => validateBundleEntries(new Map()), PetpackError);
 });
 
+test('accepts bounded presentation corrections and rejects unsafe scaling', () => {
+  const manifest = sampleManifest();
+  manifest.renderer.lookScale = 1.08;
+  manifest.renderer.lookOffsetX = 0.04;
+  manifest.renderer.lookOffsetY = -0.03;
+  manifest.renderer.animations.idle.visualScale = 1.12;
+  manifest.renderer.animations.idle.offsetX = -0.05;
+  manifest.renderer.animations.idle.offsetY = 0.06;
+  assert.equal(validateBundleEntries(sampleEntries(manifest)).manifest.id, 'test-pet');
+
+  manifest.renderer.animations.idle.visualScale = 1.8;
+  assert.throws(() => validateBundleEntries(sampleEntries(manifest)), (error) => {
+    assert.equal(error.code, 'INVALID_MANIFEST');
+    return true;
+  });
+});
+
 test('the checked-in JSON Schema is valid JSON and pins v1 constants', async () => {
   const testDirectory = path.dirname(fileURLToPath(import.meta.url));
   const schemaPath = path.resolve(testDirectory, '..', '..', '..', 'packages', 'pet-schema', 'petpack.v1.schema.json');

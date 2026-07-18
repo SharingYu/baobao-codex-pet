@@ -251,7 +251,7 @@ function validateManifestShape(manifest) {
   requireKeys(
     renderer,
     ['type', 'atlasAsset', 'cellWidth', 'cellHeight', 'columns', 'rows', 'anchor', 'defaultScale', 'animations'],
-    new Set(['type', 'atlasAsset', 'cellWidth', 'cellHeight', 'columns', 'rows', 'anchor', 'defaultScale', 'animations', 'lookDirections']),
+    new Set(['type', 'atlasAsset', 'cellWidth', 'cellHeight', 'columns', 'rows', 'anchor', 'defaultScale', 'animations', 'lookDirections', 'lookScale', 'lookOffsetX', 'lookOffsetY']),
     'manifest.renderer',
   );
   if (renderer.type !== 'sprite-atlas') fail('INVALID_MANIFEST', 'Only sprite-atlas renderers are supported in v1');
@@ -262,6 +262,9 @@ function validateManifestShape(manifest) {
   requireNumber(renderer.columns, 'manifest.renderer.columns', 1, 64, true);
   requireNumber(renderer.rows, 'manifest.renderer.rows', 1, 64, true);
   requireNumber(renderer.defaultScale, 'manifest.renderer.defaultScale', 0.1, 4);
+  if (Object.hasOwn(renderer, 'lookScale')) requireNumber(renderer.lookScale, 'manifest.renderer.lookScale', 0.7, 1.35);
+  if (Object.hasOwn(renderer, 'lookOffsetX')) requireNumber(renderer.lookOffsetX, 'manifest.renderer.lookOffsetX', -0.5, 0.5);
+  if (Object.hasOwn(renderer, 'lookOffsetY')) requireNumber(renderer.lookOffsetY, 'manifest.renderer.lookOffsetY', -0.5, 0.5);
   const anchor = requireObject(renderer.anchor, 'manifest.renderer.anchor');
   requireKeys(anchor, ['x', 'y'], new Set(['x', 'y']), 'manifest.renderer.anchor');
   requireNumber(anchor.x, 'manifest.renderer.anchor.x', 0, 1);
@@ -274,7 +277,7 @@ function validateManifestShape(manifest) {
     requireString(name, `manifest.renderer.animations key ${name}`, 1, 64, SLUG);
     const pointer = `manifest.renderer.animations.${name}`;
     const animation = requireObject(animations[name], pointer);
-    requireKeys(animation, ['row', 'frames', 'frameDurationsMs', 'loop'], new Set(['row', 'frames', 'frameDurationsMs', 'loop']), pointer);
+    requireKeys(animation, ['row', 'frames', 'frameDurationsMs', 'loop'], new Set(['row', 'frames', 'frameDurationsMs', 'loop', 'visualScale', 'offsetX', 'offsetY']), pointer);
     requireNumber(animation.row, `${pointer}.row`, 0, renderer.rows - 1, true);
     if (!Array.isArray(animation.frames) || animation.frames.length < 1 || animation.frames.length > 64) {
       fail('INVALID_MANIFEST', `${pointer}.frames must contain 1-64 columns`);
@@ -290,6 +293,9 @@ function validateManifestShape(manifest) {
       requireNumber(animation.frameDurationsMs[index], `${pointer}.frameDurationsMs[${index}]`, 16, 10000, true);
     });
     requireBoolean(animation.loop, `${pointer}.loop`);
+    if (Object.hasOwn(animation, 'visualScale')) requireNumber(animation.visualScale, `${pointer}.visualScale`, 0.7, 1.35);
+    if (Object.hasOwn(animation, 'offsetX')) requireNumber(animation.offsetX, `${pointer}.offsetX`, -0.5, 0.5);
+    if (Object.hasOwn(animation, 'offsetY')) requireNumber(animation.offsetY, `${pointer}.offsetY`, -0.5, 0.5);
   }
 
   if (Object.hasOwn(renderer, 'lookDirections')) {

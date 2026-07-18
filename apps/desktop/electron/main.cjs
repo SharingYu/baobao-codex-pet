@@ -45,6 +45,8 @@ const WINDOW_PLATFORM_RESTART_MAX_MS = 8_000;
 const WINDOW_PLATFORM_MAX_LINE_BYTES = 256 * 1024;
 const MAX_WINDOW_PLATFORMS = 256;
 const QUIT_FLUSH_TIMEOUT_MS = 2_000;
+const OVERLAY_UNRESPONSIVE_RECOVERY_MS = 6_000;
+const OVERLAY_RECOVERY_COOLDOWN_MS = 4_000;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -66,6 +68,9 @@ let runtimeConfig = null;
 const catalogWatchers = [];
 let catalogChangeTimer = null;
 let hitTestTimer = null;
+let overlayRecoveryTimer = null;
+let overlayUnresponsiveTimer = null;
+let lastOverlayRecoveryAt = 0;
 let isQuitting = false;
 let quitRequestPending = false;
 let quitRequestTimer = null;
@@ -95,6 +100,70 @@ const hitTestState = {
   lastAppliedIgnore: null,
   lastAppliedForward: null,
 };
+
+function appendDiagnostic(event, details = {}) {
+  const record = JSON.stringify({ at: new Date().toISOString(), event, ...details });
+  console.warn(`[desktop-pet] ${record}`);
+  if (!app.isReady()) return;
+  try {
+    fs.appendFileSync(path.join(app.getPath('userData'), 'diagnostics.log'), `${record}\n`, 'utf8');
+  } catch (error) {
+    console.warn('[desktop-pet] Unable to write diagnostics log:', error.message);
+  }
+}
+
+function recoverOverlay(reason = 'unknown', { immediate = false } = {}) {
+  if (isQuitting) return false;
+  clearTimeout(overlayRecoveryTimer);
+  overlayRecoveryTimer = null;
+  const elapsed = Date.now() - lastOverlayRecoveryAt;
+  if (!immediate && elapsed < OVERLAY_RECOVERY_COOLDOWN_MS) return false;
+  lastOverlayRecoveryAt = Date.now();
+  appendDiagnostic('overlay-recovery', { reason });
+
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    overlayWindow = createOverlayWindow();
+    return true;
+  }
+  if (!overlayWindow.webContents.isDestroyed()) {
+    overlayWindow.webContents.reloadIgnoringCache();
+    return true;
+  }
+  overlayWindow.destroy();
+  overlayWindow = createOverlayWindow();
+  return true;
+}
+
+function scheduleOverlayRecovery(reason, delay = 900) {
+  if (isQuitting || overlayRecoveryTimer) return;
+  appendDiagnostic('overlay-recovery-scheduled', { reason, delay });
+  overlayRecoveryTimer = setTimeout(() => {
+    overlayRecoveryTimer = null;
+    recoverOverlay(reason);
+  }, delay);
+  overlayRecoveryTimer.unref?.();
+}
+
+function attachOverlayHealthHandlers(window) {
+  window.on('unresponsive', () => {
+    appendDiagnostic('overlay-unresponsive');
+    clearTimeout(overlayUnresponsiveTimer);
+    overlayUnresponsiveTimer = setTimeout(() => {
+      overlayUnresponsiveTimer = null;
+      recoverOverlay('renderer-unresponsive');
+    }, OVERLAY_UNRESPONSIVE_RECOVERY_MS);
+    overlayUnresponsiveTimer.unref?.();
+  });
+  window.on('responsive', () => {
+    clearTimeout(overlayUnresponsiveTimer);
+    overlayUnresponsiveTimer = null;
+    appendDiagnostic('overlay-responsive');
+  });
+  window.webContents.on('render-process-gone', (_event, details) => {
+    appendDiagnostic('overlay-render-process-gone', details);
+    scheduleOverlayRecovery(`renderer-${details.reason}`, 650);
+  });
+}
 
 function readArg(name) {
   const prefix = `${name}=`;
@@ -594,10 +663,16 @@ function createOverlayWindow() {
     },
   });
 
-  window.setAlwaysOnTop(true, 'screen-saver', 1);
+  // A normal floating overlay stays above application windows without using
+  // the extreme screen-saver z-level, which can fight fullscreen video and
+  // hardware-overlay paths on Windows.
+  window.setAlwaysOnTop(true, 'floating');
   window.setSkipTaskbar(true);
   window.setFocusable(false);
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Explicitly keep the pet eligible for Windows screen capture. Electron maps
+  // the enabled state to WDA_EXCLUDEFROMCAPTURE on supported Windows versions.
+  if (process.platform === 'win32') window.setContentProtection(false);
   window.setIgnoreMouseEvents(true, { forward: true });
   hitTestState.lastAppliedIgnore = true;
   hitTestState.lastAppliedForward = true;
@@ -609,6 +684,7 @@ function createOverlayWindow() {
       setOverlayVisible(false);
     }
   });
+  attachOverlayHealthHandlers(window);
   guardRendererNavigation(window, 'overlay');
 
   void loadView(window, 'overlay').then(() => {
@@ -783,6 +859,10 @@ function rebuildTrayMenu() {
     {
       label: state.interactionBarVisible ? '隐藏互动条' : '显示互动条',
       click: () => setInteractionBarVisible(!state.interactionBarVisible),
+    },
+    {
+      label: '修复卡顿（重载宠物）',
+      click: () => recoverOverlay('tray-manual', { immediate: true }),
     },
     { type: 'separator' },
     {
@@ -1414,9 +1494,19 @@ app.on('window-all-closed', () => {
   // The tray owns the application lifetime on every platform.
 });
 
+app.on('child-process-gone', (_event, details) => {
+  if (String(details?.type ?? '').toLowerCase() !== 'gpu') return;
+  appendDiagnostic('gpu-process-gone', details);
+  scheduleOverlayRecovery(`gpu-${details.reason ?? 'gone'}`, 1_200);
+});
+
 app.on('before-quit', () => {
   clearTimeout(quitRequestTimer);
+  clearTimeout(overlayRecoveryTimer);
+  clearTimeout(overlayUnresponsiveTimer);
   quitRequestTimer = null;
+  overlayRecoveryTimer = null;
+  overlayUnresponsiveTimer = null;
   isQuitting = true;
   stopWindowPlatformWatcher();
   clearInterval(hitTestTimer);

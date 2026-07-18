@@ -26,7 +26,28 @@ test("state v1 migrates visible pets and v2 preserves hidden unknown history", (
   assert.equal(v1.platformInteractions, false, "legacy state must not silently opt into window scanning");
   const v2 = migrateRendererState({ version: 2, visiblePetIds: ["fei", "gone"], pets: { gone: { xRatio: 0.8 } } }, ["bao", "fei"]);
   assert.deepEqual(v2.visiblePetIds, ["fei"]);
-  assert.deepEqual(mergePetHistory(v2.pets, { fei: { xRatio: 0.3 } }).gone, { xRatio: 0.8 });
+  assert.deepEqual(mergePetHistory(v2.pets, { fei: { xRatio: 0.3 } }).gone, {
+    xRatio: 0.8,
+    appearanceScale: 1,
+    movementSpeed: 1
+  });
+});
+
+test("state v3 migrates and clamps per-pet presentation settings", () => {
+  const state = migrateRendererState({
+    pets: {
+      bao: { xRatio: 0.2, appearanceScale: 8, movementSpeed: 0.1 },
+      hidden: { size: 1.25, speed: 1.55 }
+    }
+  }, ["bao"]);
+  assert.equal(state.version, 3);
+  assert.deepEqual(state.pets.bao, { xRatio: 0.2, appearanceScale: 1.8, movementSpeed: 0.5 });
+  assert.equal(state.pets.hidden.appearanceScale, 1.25);
+  assert.equal(state.pets.hidden.movementSpeed, 1.55);
+
+  const invalidCoordinates = migrateRendererState({ pets: { bao: { xRatio: null, yRatio: "oops" } } }, ["bao"]);
+  assert.equal(Object.hasOwn(invalidCoordinates.pets.bao, "xRatio"), false);
+  assert.equal(Object.hasOwn(invalidCoordinates.pets.bao, "yRatio"), false);
 });
 
 test("window platform scanning requires an explicitly stored true preference", () => {

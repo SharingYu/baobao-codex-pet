@@ -1,4 +1,5 @@
 import { ANIMATIONS, drawSpriteFrame, lookCellForVector } from "./sprite.js";
+import { normalizeAppearanceScale, normalizeMovementSpeed, normalizePetRuntimeSettings } from "./pet-settings.js";
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const randomBetween = (min, max) => min + Math.random() * (max - min);
@@ -22,8 +23,26 @@ const EVENT_FALLBACKS = Object.freeze({
   land: "waiting",
   "platform-idle": "idle",
   "platform-walk-right": "walkRight",
-  "platform-walk-left": "walkLeft"
+  "platform-walk-left": "walkLeft",
+  groom: "inspect",
+  "groom-belly": "shy",
+  sleep: "waiting",
+  stretch: "pounce",
+  yawn: "waiting",
+  sniff: "curious",
+  carried: "pounce"
 });
+
+function animationPresentation(animation) {
+  const result = {};
+  const visualScale = Number(animation?.visualScale);
+  const offsetX = Number(animation?.offsetX);
+  const offsetY = Number(animation?.offsetY);
+  if (Number.isFinite(visualScale)) result.visualScale = clamp(visualScale, 0.7, 1.35);
+  if (Number.isFinite(offsetX)) result.offsetX = clamp(offsetX, -0.5, 0.5);
+  if (Number.isFinite(offsetY)) result.offsetY = clamp(offsetY, -0.5, 0.5);
+  return result;
+}
 
 function pointInPolygon(x, y, points) {
   let inside = false;
@@ -79,7 +98,7 @@ export function animationCell(animation, elapsed, reducedMotion) {
     const index = sequenceIndex(durations, elapsed, reducedMotion, animation.loop !== false);
     const frame = animation.frames[index] ?? animation.frames[0];
     const column = typeof frame === "number" ? frame : Number(frame?.column ?? frame?.col) || 0;
-    return { row: Number(frame?.row ?? animation?.row) || 0, column };
+    return { row: Number(frame?.row ?? animation?.row) || 0, column, ...animationPresentation(animation) };
   }
   const durationsSource = animation?.frameDurationsMs ?? animation?.durations;
   const frameCount = Math.max(1, Number(animation?.frameCount) || durationsSource?.length || 1);
@@ -87,7 +106,7 @@ export function animationCell(animation, elapsed, reducedMotion) {
     ? durationsSource
     : Array.from({ length: frameCount }, () => 120);
   const index = sequenceIndex(durations, elapsed, reducedMotion, animation?.loop !== false);
-  return { row: Number(animation?.row) || 0, column: index };
+  return { row: Number(animation?.row) || 0, column: index, ...animationPresentation(animation) };
 }
 
 export class PetActor {
@@ -106,11 +125,15 @@ export class PetActor {
     const cellHeight = Math.max(1, Number(renderer.cellHeight) || 208);
     const defaultScale = Number(renderer.defaultScale);
     this.scale = Number.isFinite(defaultScale) && defaultScale > 0 ? clamp(defaultScale, 0.1, 4) : 1;
+    const runtimeSettings = normalizePetRuntimeSettings(savedState);
+    this.appearanceScale = runtimeSettings.appearanceScale;
+    this.movementSpeed = runtimeSettings.movementSpeed;
     this.anchor = {
       x: clamp(Number.isFinite(Number(renderer.anchor?.x)) ? Number(renderer.anchor.x) : 0.5, 0, 1),
       y: clamp(Number.isFinite(Number(renderer.anchor?.y)) ? Number(renderer.anchor.y) : 1, 0, 1)
     };
-    this.width = (index === 0 ? 178 : 164) * this.scale;
+    this.baseWidth = (index === 0 ? 178 : 164) * this.scale;
+    this.width = this.baseWidth * this.appearanceScale;
     this.height = this.width * (cellHeight / cellWidth);
     this.x = 0;
     this.y = 0;
@@ -118,6 +141,7 @@ export class PetActor {
     this.state = "idle";
     this.stateStartedAt = performance.now();
     this.stateUntil = 0;
+    this.idleSince = this.stateStartedAt;
     this.facing = index === 0 ? "right" : "left";
     this.target = null;
     this.lookTarget = null;
@@ -129,6 +153,45 @@ export class PetActor {
     this.platformAttachment = null;
     this.fallingVelocity = 0;
     this.nextDecisionAt = performance.now() + randomBetween(3200, 6200) + index * 850;
+  }
+
+  setAppearanceScale(value) {
+    const next = normalizeAppearanceScale(value);
+    if (next === this.appearanceScale) return false;
+    const foot = this.foot;
+    this.appearanceScale = next;
+    this.width = this.baseWidth * next;
+    const renderer = this.manifest.renderer ?? {};
+    const cellWidth = Math.max(1, Number(renderer.cellWidth) || 192);
+    const cellHeight = Math.max(1, Number(renderer.cellHeight) || 208);
+    this.height = this.width * (cellHeight / cellWidth);
+    this.placeFootAt(foot.x, foot.y);
+    this.clampToStage();
+    return true;
+  }
+
+  setMovementSpeed(value) {
+    const next = normalizeMovementSpeed(value);
+    if (next === this.movementSpeed) return false;
+    this.movementSpeed = next;
+    return true;
+  }
+
+  setDragging(value, timestamp = performance.now()) {
+    const next = Boolean(value);
+    if (this.dragging === next) return false;
+    this.dragging = next;
+    this.target = null;
+    this.lookTarget = null;
+    if (next) {
+      this.sceneMotion = null;
+      this.insideBox = false;
+      this.setState("carried", 0, timestamp);
+    } else {
+      this.setState("idle", 0, timestamp);
+      this.nextDecisionAt = timestamp + randomBetween(2600, 4800);
+    }
+    return true;
   }
 
   restorePosition(savedState = {}) {
@@ -212,6 +275,7 @@ export class PetActor {
     if (this.state !== state) {
       this.state = state;
       this.stateStartedAt = timestamp;
+      if (state === "idle") this.idleSince = timestamp;
     }
     this.stateUntil = duration > 0 ? timestamp + duration : 0;
   }
@@ -250,6 +314,8 @@ export class PetActor {
   }
 
   update(deltaSeconds, timestamp) {
+    deltaSeconds = clamp(Number.isFinite(Number(deltaSeconds)) ? Number(deltaSeconds) : 0, 0, 0.05);
+    timestamp = Number.isFinite(Number(timestamp)) ? Number(timestamp) : performance.now();
     if (this.dragging) return;
     if (this.world.updatePlatformPet(this, deltaSeconds, timestamp)) return;
 
@@ -280,7 +346,7 @@ export class PetActor {
         const dy = this.target.y - this.center.y;
         const length = Math.max(0.001, Math.hypot(dx, dy));
         if (length > this.target.radius) {
-          const speed = this.target.reason === "ball" || this.target.reason === "wand" ? 148 : 88;
+          const speed = (this.target.reason === "ball" || this.target.reason === "wand" ? 148 : 88) * this.movementSpeed;
           this.x += (dx / length) * speed * deltaSeconds;
           this.y += (dy / length) * speed * deltaSeconds * 0.62;
           this.facing = dx >= 0 ? "right" : "left";
@@ -307,22 +373,28 @@ export class PetActor {
 
   chooseAutonomousAction(timestamp) {
     const roll = Math.random();
-    if (roll < 0.54) {
+    if (roll < 0.4) {
       const range = Math.min(300, this.world.width * 0.35);
       this.walkTo(
         clamp(this.center.x + randomBetween(-range, range), this.width * 0.45, this.world.width - this.width * 0.45),
         clamp(this.center.y + randomBetween(-38, 34), this.world.height * 0.5, this.world.height - this.height * 0.35),
         "wander"
       );
-    } else if (roll < 0.82) {
+    } else if (roll < 0.58) {
       const target = this.world.pointer.seen ? this.world.pointer : { x: randomBetween(0, this.world.width), y: randomBetween(0, this.world.height * 0.65) };
       this.startLook(target.x, target.y, randomBetween(1200, 2300), timestamp);
-    } else if (roll < 0.92) {
-      this.setState("waiting", randomBetween(1200, 2100), timestamp);
+    } else if (roll < 0.72) {
+      this.setState("groom", randomBetween(2800, 4500), timestamp);
+    } else if (roll < 0.8) {
+      this.setState("groom-belly", randomBetween(2400, 3900), timestamp);
+    } else if (roll < 0.9 && timestamp - this.idleSince >= 2400) {
+      this.setState("sleep", randomBetween(7000, 13000), timestamp);
+    } else if (roll < 0.96) {
+      this.setState("stretch", randomBetween(1200, 1900), timestamp);
     } else {
-      this.setState("happy", 1200, timestamp);
+      this.setState(Math.random() < 0.5 ? "yawn" : "sniff", randomBetween(1500, 2500), timestamp);
     }
-    this.nextDecisionAt = timestamp + randomBetween(5200, 10500);
+    this.nextDecisionAt = timestamp + randomBetween(4800, 9800);
   }
 
   clampToStage() {
@@ -331,8 +403,18 @@ export class PetActor {
     const maxX = Math.max(minX, this.world.width - horizontalGuard - this.width * this.anchor.x);
     const minY = 4;
     const maxY = Math.max(minY, this.world.height - 7 - this.height * this.anchor.y);
-    this.x = clamp(this.x, minX, maxX);
-    this.y = clamp(this.y, minY, maxY);
+    this.x = clamp(Number.isFinite(this.x) ? this.x : (minX + maxX) / 2, minX, maxX);
+    this.y = clamp(Number.isFinite(this.y) ? this.y : maxY, minY, maxY);
+  }
+
+  recoverFromRuntimeError(timestamp = performance.now()) {
+    this.dragging = false;
+    this.target = null;
+    this.lookTarget = null;
+    this.sceneMotion = null;
+    this.fallingVelocity = Number.isFinite(this.fallingVelocity) ? Math.max(0, this.fallingVelocity) : 0;
+    this.setState("idle", 0, timestamp);
+    this.clampToStage();
   }
 
   resolveAnimation(eventName) {
@@ -357,6 +439,9 @@ export class PetActor {
   draw(context, timestamp, reducedMotion) {
     let row;
     let column;
+    let visualScale;
+    let offsetX;
+    let offsetY;
     if (this.state === "look" && this.lookTarget) {
       const cell = lookCellForVector(
         this.lookTarget.x - this.center.x,
@@ -364,22 +449,41 @@ export class PetActor {
         this.manifest.renderer?.lookDirections
       );
       if (cell) ({ row, column } = cell);
+      visualScale = Number(this.manifest.renderer?.lookScale);
+      offsetX = Number(this.manifest.renderer?.lookOffsetX);
+      offsetY = Number(this.manifest.renderer?.lookOffsetY);
     }
     if (row === undefined) {
       let eventName = this.state;
       if (this.state === "walk") eventName = this.facing === "right" ? "walk-right" : "walk-left";
       if (this.state === "platform-walk") eventName = this.facing === "right" ? "platform-walk-right" : "platform-walk-left";
-      const cell = animationCell(this.resolveAnimation(eventName), timestamp - this.stateStartedAt, reducedMotion);
+      const elapsedScale = this.state === "walk" || this.state === "platform-walk" ? this.movementSpeed : 1;
+      const cell = animationCell(this.resolveAnimation(eventName), (timestamp - this.stateStartedAt) * elapsedScale, reducedMotion);
       row = cell.row;
       column = cell.column;
+      visualScale = cell.visualScale;
+      offsetX = cell.offsetX;
+      offsetY = cell.offsetY;
     }
+    const presentationScale = Number.isFinite(visualScale) ? clamp(visualScale, 0.7, 1.35) : 1;
+    const presentationOffsetX = Number.isFinite(offsetX) ? clamp(offsetX, -0.5, 0.5) : 0;
+    const presentationOffsetY = Number.isFinite(offsetY) ? clamp(offsetY, -0.5, 0.5) : 0;
+    const anchor = this.anchorPoint;
+    const drawWidth = this.width * presentationScale;
+    const drawHeight = this.height * presentationScale;
+    const drawBounds = {
+      x: anchor.x - drawWidth * this.anchor.x + presentationOffsetX * this.width,
+      y: anchor.y - drawHeight * this.anchor.y + presentationOffsetY * this.height,
+      width: drawWidth,
+      height: drawHeight
+    };
     const drawn = drawSpriteFrame(
       context,
       this.image,
       row,
       column,
-      this.bounds,
-      this.dragging ? 0.92 : 1,
+      drawBounds,
+      this.dragging ? 0.96 : 1,
       this.manifest.renderer
     );
     if (!drawn) this.drawPlaceholder(context);

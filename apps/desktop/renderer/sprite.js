@@ -58,6 +58,8 @@ export function lookCellForVector(dx, dy, lookDirections) {
 
 export function drawSpriteFrame(context, image, row, column, bounds, alpha = 1, renderer = {}) {
   if (!image?.complete || !image.naturalWidth) return false;
+  if (![row, column, bounds?.x, bounds?.y, bounds?.width, bounds?.height].every(Number.isFinite)) return false;
+  if (row < 0 || column < 0 || bounds.width <= 0 || bounds.height <= 0) return false;
   const cellWidth = Math.max(1, Number(renderer?.cellWidth) || CELL_WIDTH);
   const cellHeight = Math.max(1, Number(renderer?.cellHeight) || CELL_HEIGHT);
   context.save();

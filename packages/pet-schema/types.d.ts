@@ -15,6 +15,9 @@ export interface SpriteAnimationV1 {
   frames: number[];
   frameDurationsMs: number[];
   loop: boolean;
+  visualScale?: number;
+  offsetX?: number;
+  offsetY?: number;
 }
 
 export interface LookDirectionV1 {
@@ -32,6 +35,9 @@ export interface SpriteAtlasRendererV1 {
   rows: number;
   anchor: { x: number; y: number };
   defaultScale: number;
+  lookScale?: number;
+  lookOffsetX?: number;
+  lookOffsetY?: number;
   animations: Record<string, SpriteAnimationV1>;
   lookDirections?: LookDirectionV1[];
 }

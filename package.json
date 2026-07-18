@@ -1,6 +1,6 @@
 {
   "name": "pet-desktop-companion",
-  "version": "0.3.0-alpha",
+  "version": "0.3.2-alpha",
   "private": true,
   "description": "A local-first Windows desktop pet companion with installable pet and item packs, multi-pet interactions, and affinity progression.",
   "main": "apps/desktop/electron/main.cjs",
@@ -18,7 +18,7 @@
     "build:icon": "node tools/build-icon.mjs",
     "build": "pnpm build:renderer",
     "build:renderer": "vite build --config apps/desktop/vite.config.mjs",
-    "check": "node --check apps/desktop/electron/main.cjs && node --check apps/desktop/electron/preload.cjs && node --check apps/desktop/electron/petpack-compat.cjs && node --check apps/desktop/renderer/main.js && node --check apps/desktop/renderer/main-v03.js && node --check apps/desktop/renderer/v03-bootstrap.js && node --check apps/desktop/renderer/bridge.js && node --check apps/desktop/renderer/sprite.js && node --check apps/desktop/renderer/pet-actor.js && node --check apps/desktop/renderer/pet-world.js && node --check apps/desktop/renderer/platforms.js && node --check apps/desktop/renderer/progression.js && node --check apps/desktop/renderer/state.js && node --check tools/itempack/lib.mjs && node --check tools/verify-packaged-shell.mjs && node --check tools/write-release-checksums.mjs && node --check tools/render-marketing.mjs && node --check tools/marketing-video-recorder.cjs && node --check tools/marketing-video-preload.cjs && node --check marketing/video.js && node tools/render-marketing.mjs --check && node --test apps/desktop/electron/test/*.test.mjs apps/desktop/renderer/test/*.test.mjs tools/petpack/test/*.test.mjs tools/itempack/test/*.test.mjs",
+    "check": "node --check apps/desktop/electron/main.cjs && node --check apps/desktop/electron/preload.cjs && node --check apps/desktop/electron/petpack-compat.cjs && node --check apps/desktop/renderer/main.js && node --check apps/desktop/renderer/main-v03.js && node --check apps/desktop/renderer/v03-bootstrap.js && node --check apps/desktop/renderer/bridge.js && node --check apps/desktop/renderer/sprite.js && node --check apps/desktop/renderer/pet-settings.js && node --check apps/desktop/renderer/pet-actor.js && node --check apps/desktop/renderer/pet-world.js && node --check apps/desktop/renderer/platforms.js && node --check apps/desktop/renderer/progression.js && node --check apps/desktop/renderer/state.js && node --check tools/itempack/lib.mjs && node --check tools/verify-packaged-shell.mjs && node --check tools/write-release-checksums.mjs && node --check tools/render-marketing.mjs && node --check tools/marketing-video-recorder.cjs && node --check tools/marketing-video-preload.cjs && node --check marketing/video.js && node tools/render-marketing.mjs --check && node --test apps/desktop/electron/test/*.test.mjs apps/desktop/renderer/test/*.test.mjs tools/petpack/test/*.test.mjs tools/itempack/test/*.test.mjs",
     "marketing:check": "node tools/render-marketing.mjs --check",
     "marketing:images": "node tools/render-marketing.mjs --images-only",
     "marketing:render": "node tools/render-marketing.mjs",

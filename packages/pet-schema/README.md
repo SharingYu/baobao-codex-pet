@@ -33,3 +33,9 @@ signal that the neutral runtime bundles either character.
 maps runtime events such as `idle`, `move-left`, or `greet` to those clips. A
 runtime can ignore unknown events and fall back to `idle`; a pet bundle cannot
 run scripts or request host permissions.
+
+An animation may declare `visualScale` (`0.7`-`1.35`) plus normalized
+`offsetX`/`offsetY` (`-0.5`-`0.5`). These presentation-only values keep poses
+with different silhouettes visually consistent without changing the pet's
+grounding or atlas geometry. `lookScale`, `lookOffsetX`, and `lookOffsetY`
+provide the same correction for directional look cells.

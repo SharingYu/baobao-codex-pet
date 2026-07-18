@@ -184,6 +184,21 @@
         },
         "loop": {
           "type": "boolean"
+        },
+        "visualScale": {
+          "type": "number",
+          "minimum": 0.7,
+          "maximum": 1.35
+        },
+        "offsetX": {
+          "type": "number",
+          "minimum": -0.5,
+          "maximum": 0.5
+        },
+        "offsetY": {
+          "type": "number",
+          "minimum": -0.5,
+          "maximum": 0.5
         }
       }
     },
@@ -279,6 +294,21 @@
           "type": "number",
           "minimum": 0.1,
           "maximum": 4
+        },
+        "lookScale": {
+          "type": "number",
+          "minimum": 0.7,
+          "maximum": 1.35
+        },
+        "lookOffsetX": {
+          "type": "number",
+          "minimum": -0.5,
+          "maximum": 0.5
+        },
+        "lookOffsetY": {
+          "type": "number",
+          "minimum": -0.5,
+          "maximum": 0.5
         },
         "animations": {
           "type": "object",
